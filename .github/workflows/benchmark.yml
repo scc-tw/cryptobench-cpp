@@ -1,0 +1,722 @@
+name: Crypto-Bench Performance Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark_filter:
+        description: 'Benchmark filter pattern (e.g., "*/SHA256/*")'
+        required: false
+        default: ''
+        type: string
+
+env:
+  # Common CMake build options for maximum performance
+  CMAKE_COMMON_FLAGS: >-
+    -DCMAKE_BUILD_TYPE=Release
+    -DENABLE_LTO=ON
+    -DENABLE_NATIVE=ON
+    -DBUILD_CRYPTOPP=ON
+    -DBUILD_OPENSSL=ON
+    -DBUILD_BOTAN=ON
+    -DBUILD_LIBSODIUM=ON
+    -DBUILD_MBEDTLS=ON
+
+jobs:
+  # =============================================================================
+  # GCC 15 using mattkretz/cplusplus-ci container
+  # =============================================================================
+  test-gcc15-ubuntu:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/mattkretz/cplusplus-ci/gcc15
+    strategy:
+      matrix:
+        pgo: [false, true]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Install additional dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          perl python3 \
+          libtool autoconf automake
+
+    - name: Verify GCC 15
+      run: |
+        gcc --version
+        g++ --version
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/_deps
+        key: deps-gcc15-${{ hashFiles('cmake/Fetch*.cmake') }}
+        restore-keys: |
+          deps-gcc15-
+
+    - name: Configure CMake (No PGO)
+      if: matrix.pgo == false
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=OFF \
+          -DCMAKE_C_COMPILER=gcc \
+          -DCMAKE_CXX_COMPILER=g++ \
+          -GNinja
+
+    - name: Configure CMake (PGO Generate)
+      if: matrix.pgo == true
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=ON \
+          -DPGO_PHASE=GENERATE \
+          -DCMAKE_C_COMPILER=gcc \
+          -DCMAKE_CXX_COMPILER=g++ \
+          -GNinja
+
+    - name: Build (Generate Phase)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Run PGO Training
+      if: matrix.pgo == true
+      run: |
+        cd build
+        timeout 300 ./crypto-bench --training || true
+
+    - name: Reconfigure CMake (PGO Use)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=ON \
+          -DPGO_PHASE=USE \
+          -DCMAKE_C_COMPILER=gcc \
+          -DCMAKE_CXX_COMPILER=g++ \
+          -GNinja
+
+    - name: Build (Final)
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Run Benchmarks
+      run: |
+        cd build
+        BENCHMARK_FILTER="${{ github.event.inputs.benchmark_filter }}"
+        FILTER_FLAG=""
+        if [ -n "$BENCHMARK_FILTER" ]; then
+          FILTER_FLAG="--benchmark_filter=$BENCHMARK_FILTER"
+        fi
+        
+        ./crypto-bench \
+          --benchmark_format=json \
+          --benchmark_repetitions=3 \
+          --benchmark_report_aggregates_only=true \
+          --benchmark_display_aggregates_only=true \
+          $FILTER_FLAG \
+          --benchmark_out=gcc15_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json
+
+    - name: Process Results
+      run: |
+        cd build
+        python3 << 'EOF'
+        import json
+        import os
+        from datetime import datetime
+
+        # Load benchmark results
+        with open('gcc15_pgo_results.json', 'r') as f:
+            data = json.load(f)
+
+        # Create structured output
+        result = {
+            "metadata": {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "compiler": "gcc-15",
+                "platform": "ubuntu-latest",
+                "pgo_enabled": True,
+                "lto_enabled": True,
+                "native_optimizations": True,
+                "commit_sha": os.environ.get('GITHUB_SHA', ''),
+                "workflow_run_id": os.environ.get('GITHUB_RUN_ID', ''),
+                "cpu_info": {
+                    "architecture": "x86_64",
+                    "runner": "github-hosted"
+                }
+            },
+            "context": data.get("context", {}),
+            "benchmarks": []
+        }
+
+        # Process benchmarks
+        for bench in data.get("benchmarks", []):
+            if "_mean" in bench["name"]:
+                result["benchmarks"].append({
+                    "name": bench["name"].replace("_mean", ""),
+                    "library": bench["name"].split("/")[0] if "/" in bench["name"] else "unknown",
+                    "algorithm": bench["name"].split("/")[1] if "/" in bench["name"] and len(bench["name"].split("/")) > 1 else "unknown",
+                    "input_size": bench["name"].split("/")[2] if "/" in bench["name"] and len(bench["name"].split("/")) > 2 else "unknown",
+                    "time_ns": bench.get("real_time", 0),
+                    "cpu_time_ns": bench.get("cpu_time", 0),
+                    "iterations": bench.get("iterations", 0),
+                    "bytes_per_second": bench.get("bytes_per_second", 0),
+                    "items_per_second": bench.get("items_per_second", 0),
+                    "time_unit": bench.get("time_unit", "ns")
+                })
+
+        # Save processed results
+        with open('gcc15_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
+            json.dump(result, f, indent=2)
+        EOF
+
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: gcc15-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
+        path: |
+          build/gcc15_*_results.json
+          build/gcc15_*_processed.json
+        retention-days: 30
+
+  # =============================================================================
+  # Clang 22 using mattkretz/cplusplus-ci container
+  # =============================================================================
+  test-clang22-ubuntu:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/mattkretz/cplusplus-ci/clang22
+    strategy:
+      matrix:
+        pgo: [false, true]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Install additional dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          perl python3 \
+          libtool autoconf automake
+
+    - name: Verify Clang 22
+      run: |
+        clang --version
+        clang++ --version
+        llvm-ar --version
+        llvm-profdata --version
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/_deps
+        key: deps-clang22-${{ hashFiles('cmake/Fetch*.cmake') }}
+        restore-keys: |
+          deps-clang22-
+
+    - name: Configure CMake (No PGO)
+      if: matrix.pgo == false
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=OFF \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -GNinja
+
+    - name: Configure CMake (PGO Generate)
+      if: matrix.pgo == true
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=ON \
+          -DPGO_PHASE=GENERATE \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -GNinja
+
+    - name: Build (Generate Phase)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Run PGO Training
+      if: matrix.pgo == true
+      run: |
+        cd build
+        timeout 300 ./crypto-bench --training || true
+        # Convert raw profile data to indexed format for Clang
+        llvm-profdata merge -output=default.profdata default_*.profraw || true
+
+    - name: Reconfigure CMake (PGO Use)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        cmake .. \
+          ${{ env.CMAKE_COMMON_FLAGS }} \
+          -DENABLE_PGO=ON \
+          -DPGO_PHASE=USE \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -GNinja
+
+    - name: Build (Final)
+      run: |
+        cd build
+        ninja -j$(nproc)
+
+    - name: Run Benchmarks
+      run: |
+        cd build
+        BENCHMARK_FILTER="${{ github.event.inputs.benchmark_filter }}"
+        FILTER_FLAG=""
+        if [ -n "$BENCHMARK_FILTER" ]; then
+          FILTER_FLAG="--benchmark_filter=$BENCHMARK_FILTER"
+        fi
+        
+        ./crypto-bench \
+          --benchmark_format=json \
+          --benchmark_repetitions=3 \
+          --benchmark_report_aggregates_only=true \
+          --benchmark_display_aggregates_only=true \
+          $FILTER_FLAG \
+          --benchmark_out=clang22_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json
+
+    - name: Process Results
+      run: |
+        cd build
+        python3 << 'EOF'
+        import json
+        import os
+        from datetime import datetime
+
+        # Load benchmark results
+        with open('clang22_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json', 'r') as f:
+            data = json.load(f)
+
+        # Create structured output
+        result = {
+            "metadata": {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "compiler": "clang-22",
+                "platform": "ubuntu-24.04",
+                "pgo_enabled": ${{ matrix.pgo && 'True' || 'False' }},
+                "lto_enabled": True,
+                "native_optimizations": True,
+                "commit_sha": os.environ.get('GITHUB_SHA', ''),
+                "workflow_run_id": os.environ.get('GITHUB_RUN_ID', ''),
+                "cpu_info": {
+                    "architecture": "x86_64",
+                    "runner": "github-hosted"
+                }
+            },
+            "context": data.get("context", {}),
+            "benchmarks": []
+        }
+
+        # Process benchmarks
+        for bench in data.get("benchmarks", []):
+            if "_mean" in bench["name"]:
+                result["benchmarks"].append({
+                    "name": bench["name"].replace("_mean", ""),
+                    "library": bench["name"].split("/")[0] if "/" in bench["name"] else "unknown",
+                    "algorithm": bench["name"].split("/")[1] if "/" in bench["name"] and len(bench["name"].split("/")) > 1 else "unknown",
+                    "input_size": bench["name"].split("/")[2] if "/" in bench["name"] and len(bench["name"].split("/")) > 2 else "unknown",
+                    "time_ns": bench.get("real_time", 0),
+                    "cpu_time_ns": bench.get("cpu_time", 0),
+                    "iterations": bench.get("iterations", 0),
+                    "bytes_per_second": bench.get("bytes_per_second", 0),
+                    "items_per_second": bench.get("items_per_second", 0),
+                    "time_unit": bench.get("time_unit", "ns")
+                })
+
+        # Save processed results
+        with open('clang22_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
+            json.dump(result, f, indent=2)
+        EOF
+
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: clang22-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
+        path: |
+          build/clang22_*_results.json
+          build/clang22_*_processed.json
+        retention-days: 30
+
+  # =============================================================================
+  # MSVC 2022 on Windows
+  # =============================================================================
+  test-msvc2022-windows:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        pgo: [false, true]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Setup MSVC 2022
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '17.0'
+
+    - name: Setup Visual Studio environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+        vsversion: 2022
+
+    - name: Install dependencies
+      run: |
+        # Install Strawberry Perl for OpenSSL build
+        choco install strawberryperl -y
+        # Add Perl to PATH
+        echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        # Install Python (should already be available)
+        python --version
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/_deps
+        key: deps-msvc2022-${{ hashFiles('cmake/Fetch*.cmake') }}
+        restore-keys: |
+          deps-msvc2022-
+
+    - name: Configure CMake (No PGO)
+      if: matrix.pgo == false
+      run: |
+        mkdir build
+        cd build
+        cmake .. `
+          ${{ env.CMAKE_COMMON_FLAGS }} `
+          -DENABLE_PGO=OFF `
+          -G "Visual Studio 17 2022" `
+          -A x64
+
+    - name: Configure CMake (PGO Generate)
+      if: matrix.pgo == true
+      run: |
+        mkdir build
+        cd build
+        cmake .. `
+          ${{ env.CMAKE_COMMON_FLAGS }} `
+          -DENABLE_PGO=ON `
+          -DPGO_PHASE=GENERATE `
+          -G "Visual Studio 17 2022" `
+          -A x64
+
+    - name: Build (Generate Phase)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        cmake --build . --config Release --parallel
+
+    - name: Run PGO Training
+      if: matrix.pgo == true
+      run: |
+        cd build
+        # Run training with timeout
+        $job = Start-Job -ScriptBlock { & ".\Release\crypto-bench.exe" --training }
+        Wait-Job $job -Timeout 300
+        Stop-Job $job -ErrorAction SilentlyContinue
+        Remove-Job $job -ErrorAction SilentlyContinue
+
+    - name: Reconfigure CMake (PGO Use)
+      if: matrix.pgo == true
+      run: |
+        cd build
+        cmake .. `
+          ${{ env.CMAKE_COMMON_FLAGS }} `
+          -DENABLE_PGO=ON `
+          -DPGO_PHASE=USE `
+          -G "Visual Studio 17 2022" `
+          -A x64
+
+    - name: Build (Final)
+      run: |
+        cd build
+        cmake --build . --config Release --parallel
+
+    - name: Run Benchmarks
+      run: |
+        cd build
+        $benchmarkFilter = "${{ github.event.inputs.benchmark_filter }}"
+        $filterFlag = ""
+        if ($benchmarkFilter) {
+          $filterFlag = "--benchmark_filter=$benchmarkFilter"
+        }
+        
+        & ".\Release\crypto-bench.exe" `
+          --benchmark_format=json `
+          --benchmark_repetitions=3 `
+          --benchmark_report_aggregates_only=true `
+          --benchmark_display_aggregates_only=true `
+          $filterFlag `
+          --benchmark_out=msvc2022_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json
+
+    - name: Process Results
+      run: |
+        cd build
+        python << 'EOF'
+        import json
+        import os
+        from datetime import datetime
+
+        # Load benchmark results
+        with open('msvc2022_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json', 'r') as f:
+            data = json.load(f)
+
+        # Create structured output
+        result = {
+            "metadata": {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "compiler": "msvc-2022",
+                "platform": "windows-2022",
+                "pgo_enabled": ${{ matrix.pgo && 'True' || 'False' }},
+                "lto_enabled": True,
+                "native_optimizations": True,
+                "commit_sha": os.environ.get('GITHUB_SHA', ''),
+                "workflow_run_id": os.environ.get('GITHUB_RUN_ID', ''),
+                "cpu_info": {
+                    "architecture": "x86_64",
+                    "runner": "github-hosted"
+                }
+            },
+            "context": data.get("context", {}),
+            "benchmarks": []
+        }
+
+        # Process benchmarks
+        for bench in data.get("benchmarks", []):
+            if "_mean" in bench["name"]:
+                result["benchmarks"].append({
+                    "name": bench["name"].replace("_mean", ""),
+                    "library": bench["name"].split("/")[0] if "/" in bench["name"] else "unknown",
+                    "algorithm": bench["name"].split("/")[1] if "/" in bench["name"] and len(bench["name"].split("/")) > 1 else "unknown",
+                    "input_size": bench["name"].split("/")[2] if "/" in bench["name"] and len(bench["name"].split("/")) > 2 else "unknown",
+                    "time_ns": bench.get("real_time", 0),
+                    "cpu_time_ns": bench.get("cpu_time", 0),
+                    "iterations": bench.get("iterations", 0),
+                    "bytes_per_second": bench.get("bytes_per_second", 0),
+                    "items_per_second": bench.get("items_per_second", 0),
+                    "time_unit": bench.get("time_unit", "ns")
+                })
+
+        # Save processed results
+        with open('msvc2022_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
+            json.dump(result, f, indent=2)
+        EOF
+
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: msvc2022-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
+        path: |
+          build/msvc2022_*_results.json
+          build/msvc2022_*_processed.json
+        retention-days: 30
+
+  # =============================================================================
+  # Aggregate Results and Generate Summary
+  # =============================================================================
+  aggregate-results:
+    runs-on: ubuntu-latest
+    needs: [test-gcc15-ubuntu, test-clang22-ubuntu, test-msvc2022-windows]
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./results
+
+    - name: Generate Performance Summary
+      run: |
+        python3 << 'EOF'
+        import json
+        import os
+        import glob
+        from datetime import datetime
+
+        # Collect all processed results
+        all_results = []
+        for file_path in glob.glob('./results/**/*_processed.json', recursive=True):
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    all_results.append(data)
+                    print(f"Loaded: {file_path}")
+            except Exception as e:
+                print(f"Error loading {file_path}: {e}")
+
+        # Create comprehensive summary
+        summary = {
+            "summary_metadata": {
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "total_configurations": len(all_results),
+                "workflow_run_id": os.environ.get('GITHUB_RUN_ID', ''),
+                "commit_sha": os.environ.get('GITHUB_SHA', ''),
+                "repository": os.environ.get('GITHUB_REPOSITORY', '')
+            },
+            "configurations": [],
+            "performance_comparison": {
+                "fastest_by_algorithm": {},
+                "compiler_rankings": {},
+                "pgo_impact": {}
+            }
+        }
+
+        # Process each configuration
+        for result in all_results:
+            config = {
+                "compiler": result["metadata"]["compiler"],
+                "platform": result["metadata"]["platform"],
+                "pgo_enabled": result["metadata"]["pgo_enabled"],
+                "benchmark_count": len(result["benchmarks"]),
+                "benchmarks": result["benchmarks"]
+            }
+            summary["configurations"].append(config)
+
+        # Calculate performance comparisons
+        algorithm_performance = {}
+        compiler_scores = {}
+        
+        for result in all_results:
+            compiler_key = f"{result['metadata']['compiler']}_{'pgo' if result['metadata']['pgo_enabled'] else 'nopgo'}"
+            compiler_scores[compiler_key] = {"total_score": 0, "benchmark_count": 0}
+            
+            for bench in result["benchmarks"]:
+                algo_key = f"{bench['library']}/{bench['algorithm']}/{bench['input_size']}"
+                
+                if algo_key not in algorithm_performance:
+                    algorithm_performance[algo_key] = []
+                
+                algorithm_performance[algo_key].append({
+                    "compiler": compiler_key,
+                    "bytes_per_second": bench["bytes_per_second"],
+                    "time_ns": bench["time_ns"]
+                })
+                
+                # Add to compiler score (higher bytes_per_second = better)
+                if bench["bytes_per_second"] > 0:
+                    compiler_scores[compiler_key]["total_score"] += bench["bytes_per_second"]
+                    compiler_scores[compiler_key]["benchmark_count"] += 1
+
+        # Find fastest implementation for each algorithm
+        for algo, performances in algorithm_performance.items():
+            if performances:
+                fastest = max(performances, key=lambda x: x["bytes_per_second"])
+                summary["performance_comparison"]["fastest_by_algorithm"][algo] = fastest
+
+        # Calculate compiler rankings
+        for compiler, scores in compiler_scores.items():
+            if scores["benchmark_count"] > 0:
+                avg_score = scores["total_score"] / scores["benchmark_count"]
+                summary["performance_comparison"]["compiler_rankings"][compiler] = {
+                    "average_bytes_per_second": avg_score,
+                    "total_benchmarks": scores["benchmark_count"]
+                }
+
+        # Save comprehensive summary
+        with open('performance_summary.json', 'w') as f:
+            json.dump(summary, f, indent=2)
+
+        print(f"Generated summary with {len(all_results)} configurations")
+        print(f"Total unique algorithms: {len(algorithm_performance)}")
+        EOF
+
+    - name: Upload Performance Summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-summary
+        path: |
+          performance_summary.json
+          results/
+        retention-days: 90
+
+    - name: Generate Performance Report
+      run: |
+        python3 << 'EOF'
+        import json
+
+        # Load summary
+        with open('performance_summary.json', 'r') as f:
+            summary = json.load(f)
+
+        # Generate markdown report
+        report = f"""# Crypto-Bench Performance Report
+
+        Generated: {summary['summary_metadata']['generated_at']}
+        Commit: {summary['summary_metadata']['commit_sha'][:8]}
+        Configurations Tested: {summary['summary_metadata']['total_configurations']}
+
+        ## Compiler Performance Rankings
+
+        """
+
+        rankings = summary['performance_comparison']['compiler_rankings']
+        sorted_compilers = sorted(rankings.items(), 
+                                key=lambda x: x[1]['average_bytes_per_second'], 
+                                reverse=True)
+
+        report += "| Rank | Compiler | Avg Performance (MB/s) | Benchmarks |\n"
+        report += "|------|----------|------------------------|------------|\n"
+
+        for i, (compiler, stats) in enumerate(sorted_compilers, 1):
+            avg_mb_s = stats['average_bytes_per_second'] / (1024*1024)
+            report += f"| {i} | {compiler} | {avg_mb_s:.2f} | {stats['total_benchmarks']} |\n"
+
+        report += "\n## Top Performing Algorithms\n\n"
+        
+        fastest_algos = summary['performance_comparison']['fastest_by_algorithm']
+        sorted_algos = sorted(fastest_algos.items(), 
+                            key=lambda x: x[1]['bytes_per_second'], 
+                            reverse=True)
+
+        report += "| Algorithm | Best Compiler | Performance (MB/s) |\n"
+        report += "|-----------|---------------|--------------------|\n"
+
+        for algo, perf in sorted_algos[:20]:  # Top 20
+            mb_s = perf['bytes_per_second'] / (1024*1024)
+            report += f"| {algo} | {perf['compiler']} | {mb_s:.2f} |\n"
+
+        # Save report
+        with open('PERFORMANCE_REPORT.md', 'w') as f:
+            f.write(report)
+
+        print("Generated performance report")
+        EOF
+
+    - name: Upload Performance Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-report
+        path: PERFORMANCE_REPORT.md
+        retention-days: 90
