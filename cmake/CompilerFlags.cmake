@@ -10,7 +10,6 @@ set(CRYPTO_BENCH_C_FLAGS "")
 # Base optimization flags (applicable to all compilers)
 list(APPEND CRYPTO_BENCH_CXX_FLAGS
     -O3                         # Maximum optimization level
-    -DNDEBUG                    # Disable assertions for release builds
     -fomit-frame-pointer        # Omit frame pointers for better performance
     -funroll-loops              # Enable loop unrolling
 )

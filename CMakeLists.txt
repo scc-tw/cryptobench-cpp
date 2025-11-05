@@ -44,6 +44,16 @@ endif()
 # Include compiler flags configuration
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerFlags.cmake)
 
+# Workaround: Disable mbedTLS build on Windows due to upstream CMake backslash-escape issues
+# See CI errors: invalid character escapes like "\m" and "\t" in generated paths on Windows
+# This avoids touching third-party sources and unblocks Windows builds
+if(WIN32)
+    if(BUILD_MBEDTLS)
+        message(WARNING "Disabling BUILD_MBEDTLS on Windows due to upstream CMake path escape issues in mbedTLS 4.x")
+    endif()
+    set(BUILD_MBEDTLS OFF CACHE BOOL "Build and benchmark mbedTLS 4.0.0" FORCE)
+endif()
+
 # Set up FetchContent for dependency management
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
