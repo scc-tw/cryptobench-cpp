@@ -64,32 +64,59 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CRYPTOPP_WARNING_FLAGS "-Wno-array-bounds -Wno-uninitialized")
 endif()
 
-# Create custom target to build Crypto++
-# Use conservative flags that work with both GCC and Clang
-add_custom_command(
-    OUTPUT ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
-    COMMAND ${CMAKE_COMMAND} -E env 
-        CXX=${CMAKE_CXX_COMPILER}
-        CC=${CMAKE_C_COMPILER}
-        CXXFLAGS="-DNDEBUG -O3 -fPIC -march=native -mtune=native -fomit-frame-pointer -funroll-loops ${CRYPTOPP_WARNING_FLAGS}"
-        make -j${CMAKE_BUILD_PARALLEL_LEVEL} ${CRYPTOPP_MAKE_TARGET}
-    WORKING_DIRECTORY ${CRYPTOPP_SOURCE_DIR}
-    COMMENT "Building Crypto++ 8.9.0..."
-    VERBATIM
-)
+if(WIN32)
+    # Use CMake-based build for Crypto++ on Windows to avoid path/space issues with GNUmakefile
+    set(CRYPTOPP_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/cryptopp-build)
+    ExternalProject_Add(
+        cryptopp_external
+        SOURCE_DIR ${CRYPTOPP_SOURCE_DIR}
+        BINARY_DIR ${CRYPTOPP_BUILD_DIR}
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DBUILD_TESTING=OFF
+            -DBUILD_SHARED=OFF
+            -DBUILD_STATIC=ON
+        BUILD_COMMAND ${CMAKE_COMMAND} --build ${CRYPTOPP_BUILD_DIR} --config Release
+        INSTALL_COMMAND ""
+        BUILD_BYPRODUCTS
+            ${CRYPTOPP_BUILD_DIR}/Release/cryptopp-static.lib
+            ${CRYPTOPP_BUILD_DIR}/Release/cryptopp.lib
+    )
 
-add_custom_target(cryptopp_build ALL
-    DEPENDS ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
-)
+    add_library(cryptopp::cryptopp STATIC IMPORTED GLOBAL)
+    # Prefer the static target name used by Crypto++ CMake
+    set_target_properties(cryptopp::cryptopp PROPERTIES
+        IMPORTED_LOCATION ${CRYPTOPP_BUILD_DIR}/Release/cryptopp-static.lib
+        INTERFACE_INCLUDE_DIRECTORIES ${CRYPTOPP_SOURCE_DIR}
+    )
+    add_dependencies(cryptopp::cryptopp cryptopp_external)
+else()
+    # Create custom target to build Crypto++ with GNU make
+    add_custom_command(
+        OUTPUT ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
+        COMMAND ${CMAKE_COMMAND} -E env 
+            CXX=${CMAKE_CXX_COMPILER}
+            CC=${CMAKE_C_COMPILER}
+            CXXFLAGS="-DNDEBUG -O3 -fPIC -march=native -mtune=native -fomit-frame-pointer -funroll-loops ${CRYPTOPP_WARNING_FLAGS}"
+            make -j${CMAKE_BUILD_PARALLEL_LEVEL} ${CRYPTOPP_MAKE_TARGET}
+        WORKING_DIRECTORY ${CRYPTOPP_SOURCE_DIR}
+        COMMENT "Building Crypto++ 8.9.0..."
+        VERBATIM
+    )
 
-# Create imported target for Crypto++
-add_library(cryptopp::cryptopp STATIC IMPORTED GLOBAL)
-set_target_properties(cryptopp::cryptopp PROPERTIES
-    IMPORTED_LOCATION ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
-    INTERFACE_INCLUDE_DIRECTORIES ${CRYPTOPP_SOURCE_DIR}
-)
+    add_custom_target(cryptopp_build ALL
+        DEPENDS ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
+    )
 
-# Make sure the library is built before it's used
-add_dependencies(cryptopp::cryptopp cryptopp_build)
+    # Create imported target for Crypto++
+    add_library(cryptopp::cryptopp STATIC IMPORTED GLOBAL)
+    set_target_properties(cryptopp::cryptopp PROPERTIES
+        IMPORTED_LOCATION ${CRYPTOPP_SOURCE_DIR}/libcryptopp.a
+        INTERFACE_INCLUDE_DIRECTORIES ${CRYPTOPP_SOURCE_DIR}
+    )
+
+    # Make sure the library is built before it's used
+    add_dependencies(cryptopp::cryptopp cryptopp_build)
+endif()
 
 message(STATUS "Crypto++ 8.9.0 configured successfully")

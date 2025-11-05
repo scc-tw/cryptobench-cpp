@@ -132,6 +132,11 @@ set(OPENSSL_CONFIG_OPTIONS
     # - Poly1305 (enabled by default in OpenSSL 3.x)
 )
 
+# On Windows CI, avoid NASM requirement by disabling assembly
+if(WIN32)
+    list(APPEND OPENSSL_CONFIG_OPTIONS no-asm)
+endif()
+
 # Use ExternalProject_Add to build OpenSSL
 ExternalProject_Add(
     openssl_external
@@ -180,14 +185,18 @@ function(setup_openssl_targets)
     else()
         set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_BUILD_DIR}/libcrypto.a)
         set(OPENSSL_SSL_LIBRARY ${OPENSSL_BUILD_DIR}/libssl.a)
-        set(OPENSSL_INCLUDE_DIR "${OPENSSL_BUILD_DIR}/include")
+        # Use headers from the source tree; OpenSSL does not populate a build include dir on all platforms
+        set(OPENSSL_INCLUDE_DIR "${OPENSSL_SOURCE_DIR}/include")
     endif()
 
+    # Ensure no stale include dirs remain on reconfigure
+    set_property(TARGET OpenSSL::Crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES "")
     set_target_properties(OpenSSL::Crypto PROPERTIES
         IMPORTED_LOCATION ${OPENSSL_CRYPTO_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}"
     )
 
+    set_property(TARGET OpenSSL::SSL PROPERTY INTERFACE_INCLUDE_DIRECTORIES "")
     set_target_properties(OpenSSL::SSL PROPERTIES
         IMPORTED_LOCATION ${OPENSSL_SSL_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}"
