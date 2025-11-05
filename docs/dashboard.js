@@ -1,663 +1,437 @@
-// Crypto-Bench Dashboard JavaScript
+// Crypto-Bench Performance Analytics Dashboard
+// Version 2.0 - Complete rewrite with advanced visualizations
+
 class CryptoBenchDashboard {
     constructor() {
-        this.data = null;
+        this.rawData = null;
+        this.processedData = null;
         this.charts = {};
-        this.supportedAlgorithms = this.initializeSupportedAlgorithms();
-        this.initializePage();
-    }
+        this.isLoading = false; // Prevent multiple simultaneous loads
+        this.libraries = ['Crypto++', 'OpenSSL', 'Botan', 'Libsodium', 'MbedTLS'];
+        this.blockSizes = [64, 256, 1024, 4096, 16384];
 
-    initializeSupportedAlgorithms() {
-        return {
-            'Hash Functions': {
-                'SHA-256': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'],
-                'SHA-512': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'],
-                'SHA3-256': ['Crypto++', 'OpenSSL', 'Botan', 'mbedTLS'], // libsodium doesn't support SHA3
-                'BLAKE2b': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS']
-            },
-            'Symmetric Encryption': {
-                'AES-128-GCM': ['Crypto++', 'OpenSSL', 'Botan', 'mbedTLS'], // libsodium only has AES-256-GCM
-                'AES-256-GCM': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'],
-                'AES-256-CBC': ['Crypto++', 'OpenSSL', 'Botan', 'mbedTLS'], // libsodium doesn't support CBC
-                'ChaCha20-Poly1305': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS']
-            },
-            'Asymmetric Cryptography': {
-                'RSA-2048': ['Crypto++', 'Botan', 'mbedTLS'], // OpenSSL stubs not implemented
-                'RSA-4096': ['Crypto++', 'Botan', 'mbedTLS'], // OpenSSL stubs not implemented
-                'ECDSA-P256': ['Crypto++', 'Botan', 'mbedTLS'], // OpenSSL stubs not implemented
-                'Ed25519': ['Crypto++', 'Botan', 'libsodium', 'mbedTLS'] // OpenSSL stubs not implemented
-            },
-            'Key Exchange': {
-                'ECDH-P256': ['Crypto++', 'Botan', 'mbedTLS'], // OpenSSL stubs not implemented
-                'X25519': ['Crypto++', 'Botan', 'libsodium', 'mbedTLS'] // OpenSSL stubs not implemented
-            },
-            'Message Authentication': {
-                'HMAC-SHA256': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'],
-                'Poly1305': ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS']
-            }
+        this.categories = {
+            hash: ['SHA256', 'SHA512', 'SHA3_256', 'BLAKE2b'],
+            symmetric: ['AES128GCM', 'AES256GCM', 'AES256CBC', 'ChaCha20Poly1305'],
+            mac: ['HMACSHA256', 'HMACSHA512', 'Poly1305'],
+            asymmetric: ['RSA2048', 'RSA4096', 'ECDSAP256', 'Ed25519'],
+            kex: ['ECDHP256', 'X25519']
         };
+
+        this.colorScheme = {
+            'Crypto++': '#FF6384',
+            'OpenSSL': '#36A2EB',
+            'Botan': '#FFCE56',
+            'Libsodium': '#4BC0C0',
+            'MbedTLS': '#9966FF'
+        };
+
+        this.initializeEventListeners();
     }
 
-    initializePage() {
-        this.renderAlgorithmSupport();
-        
-        // Load URL from hash if present
-        const hash = window.location.hash.substring(1);
-        if (hash) {
-            document.getElementById('jsonUrl').value = decodeURIComponent(hash);
-            this.loadBenchmarkData();
-        }
-    }
+    initializeEventListeners() {
+        // Tab navigation
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+        });
 
-    renderAlgorithmSupport() {
-        const container = document.getElementById('algorithmSupport');
-        const libraries = ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'];
-        
-        Object.entries(this.supportedAlgorithms).forEach(([category, algorithms]) => {
-            const categoryDiv = document.createElement('div');
-            categoryDiv.className = 'algorithm-category';
-            
-            const title = document.createElement('h3');
-            title.textContent = category;
-            categoryDiv.appendChild(title);
-            
-            const list = document.createElement('ul');
-            list.className = 'algorithm-list';
-            
-            Object.entries(algorithms).forEach(([algorithm, supportedLibs]) => {
-                const item = document.createElement('li');
-                item.innerHTML = `<strong>${algorithm}</strong><br>`;
-                
-                libraries.forEach(lib => {
-                    const span = document.createElement('span');
-                    span.textContent = lib;
-                    span.className = supportedLibs.includes(lib) ? 'supported' : 'not-supported';
-                    item.appendChild(span);
-                    if (lib !== libraries[libraries.length - 1]) {
-                        item.appendChild(document.createTextNode(', '));
-                    }
-                });
-                
-                list.appendChild(item);
-            });
-            
-            categoryDiv.appendChild(list);
-            container.appendChild(categoryDiv);
+        // Enter key on data URL input
+        document.getElementById('dataUrl')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.loadData();
+        });
+
+        // Search functionality
+        document.getElementById('tableSearch')?.addEventListener('input', (e) => {
+            this.filterTable(e.target.value);
+        });
+
+        // Sort functionality
+        document.getElementById('tableSort')?.addEventListener('change', (e) => {
+            this.sortTable(e.target.value);
         });
     }
 
-    showLoading() {
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('error').style.display = 'none';
-        document.getElementById('statsGrid').style.display = 'none';
-        document.getElementById('chartsContainer').style.display = 'none';
-    }
-
-    hideLoading() {
-        document.getElementById('loading').style.display = 'none';
-    }
-
-    showError(message) {
-        const errorDiv = document.getElementById('error');
-        errorDiv.innerHTML = `<strong>Error:</strong> ${message}`;
-        errorDiv.style.display = 'block';
-        this.hideLoading();
-    }
-
-    normalizeData(raw) {
-        // If already in aggregated summary format
-        if (raw && Array.isArray(raw.configurations)) {
-            // Ensure summary_metadata exists
-            if (!raw.summary_metadata) {
-                raw.summary_metadata = {
-                    generated_at: new Date().toISOString(),
-                    total_configurations: raw.configurations.length,
-                    workflow_run_id: '',
-                    commit_sha: '',
-                    repository: ''
-                };
+    // Tab switching logic
+    switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.classList.remove('active');
+            if (tab.dataset.tab === tabName) {
+                tab.classList.add('active');
             }
-            return raw;
-        }
+        });
 
-        // Google Benchmark raw JSON: { context: {...}, benchmarks: [...] }
-        if (raw && raw.context && Array.isArray(raw.benchmarks)) {
-            const toNs = (value, unit) => {
-                const scale = unit === 'ns' ? 1 : unit === 'us' ? 1e3 : unit === 'ms' ? 1e6 : unit === 's' ? 1e9 : 1;
-                return Math.round((value || 0) * scale);
-            };
-
-            // Prefer mean aggregates if present
-            const meanBenches = raw.benchmarks.filter(b => b.run_type === 'aggregate' && b.aggregate_name === 'mean');
-            const source = meanBenches.length > 0 ? meanBenches : raw.benchmarks;
-
-            const normalizedBenchmarks = source.map(b => {
-                const parsed = this.parseBenchmarkName(typeof b.name === 'string' ? b.name : (b.run_name || ''));
-                return {
-                    name: b.name || b.run_name || parsed.baseName,
-                    library: parsed.library,
-                    algorithm: parsed.algorithm,
-                    input_size: parsed.inputSize,
-                    time_ns: toNs(b.real_time ?? b.cpu_time ?? 0, b.time_unit || 'ns'),
-                    cpu_time_ns: toNs(b.cpu_time ?? 0, b.time_unit || 'ns'),
-                    iterations: b.iterations || 0,
-                    bytes_per_second: b.bytes_per_second || 0,
-                    items_per_second: b.items_per_second || 0,
-                    time_unit: b.time_unit || 'ns'
-                };
-            });
-
-            const cfg = {
-                compiler: 'unknown',
-                platform: (raw.context && raw.context.host_name) ? raw.context.host_name : 'unknown',
-                pgo_enabled: false,
-                benchmark_count: normalizedBenchmarks.length,
-                benchmarks: normalizedBenchmarks
-            };
-
-            return {
-                summary_metadata: {
-                    generated_at: raw.context && raw.context.date ? raw.context.date : new Date().toISOString(),
-                    total_configurations: 1,
-                    workflow_run_id: '',
-                    commit_sha: '',
-                    repository: ''
-                },
-                configurations: [cfg],
-                performance_comparison: {
-                    fastest_by_algorithm: {},
-                    compiler_rankings: {},
-                    pgo_impact: {}
-                }
-            };
-        }
-
-        // If single processed results with benchmarks array
-        if (raw && Array.isArray(raw.benchmarks)) {
-            const meta = raw.metadata || {};
-            const cfg = {
-                compiler: meta.compiler || 'unknown',
-                platform: meta.platform || 'unknown',
-                pgo_enabled: Boolean(meta.pgo_enabled),
-                benchmark_count: raw.benchmarks.length,
-                benchmarks: raw.benchmarks.map(b => ({
-                    name: b.name || `${b.library || 'unknown'}/${b.algorithm || 'unknown'}/${b.input_size || 'unknown'}`,
-                    library: b.library || 'unknown',
-                    algorithm: b.algorithm || 'unknown',
-                    input_size: String(b.input_size ?? 'unknown'),
-                    time_ns: b.time_ns ?? b.real_time ?? 0,
-                    bytes_per_second: b.bytes_per_second ?? 0,
-                    iterations: b.iterations ?? 0
-                }))
-            };
-
-            return {
-                summary_metadata: {
-                    generated_at: meta.timestamp || new Date().toISOString(),
-                    total_configurations: 1,
-                    workflow_run_id: meta.workflow_run_id || '',
-                    commit_sha: meta.commit_sha || '',
-                    repository: ''
-                },
-                configurations: [cfg],
-                performance_comparison: raw.performance_comparison || {
-                    fastest_by_algorithm: {},
-                    compiler_rankings: {},
-                    pgo_impact: {}
-                }
-            };
-        }
-
-        throw new Error('Unrecognized results format');
+        // Update tab panels
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        document.getElementById(`${tabName}-tab`)?.classList.add('active');
     }
 
-    parseBenchmarkName(name) {
-        // Expected forms:
-        //  - "BM_<Lib>_<Algo>/<size>[_suffix]"
-        //  - "BM_<Lib>_<Algo>[_suffix]" (no size)
-        const result = { baseName: name || '', library: 'unknown', algorithm: 'unknown', inputSize: 'unknown' };
-        if (!name || typeof name !== 'string') return result;
-
-        // Strip aggregate suffixes from trailing name part for parsing convenience
-        const withoutSuffix = name.replace(/_(mean|median|stddev|cv)$/i, '');
-
-        const parts = withoutSuffix.split('/');
-        const head = parts[0] || '';
-        const sizePart = parts.length > 1 ? parts[1] : '';
-
-        // Extract library and algorithm tokens from head: BM_<Lib>_<Algo>
-        const m = head.match(/^BM_([^_]+)_(.+)$/);
-        if (!m) {
-            return result;
-        }
-        const libToken = m[1];
-        const algoToken = m[2];
-
-        result.library = this.mapLibraryToken(libToken);
-        result.algorithm = this.mapAlgorithmToken(algoToken);
-        result.inputSize = sizePart ? String(sizePart).replace(/_.*/, '') : 'unknown';
-        return result;
-    }
-
-    mapLibraryToken(token) {
-        const map = {
-            'Cryptopp': 'Crypto++',
-            'OpenSSL': 'OpenSSL',
-            'Botan': 'Botan',
-            'Libsodium': 'libsodium',
-            'MbedTLS': 'mbedTLS'
-        };
-        return map[token] || token || 'unknown';
-    }
-
-    mapAlgorithmToken(token) {
-        if (!token) return 'unknown';
-        // Common direct mappings
-        const direct = {
-            'SHA256': 'SHA-256',
-            'SHA512': 'SHA-512',
-            'SHA3_256': 'SHA3-256',
-            'BLAKE2b': 'BLAKE2b',
-            'ChaCha20Poly1305': 'ChaCha20-Poly1305',
-            'Ed25519': 'Ed25519',
-            'X25519': 'X25519',
-            'HMACSHA256': 'HMAC-SHA256',
-            'Poly1305': 'Poly1305'
-        };
-        if (direct[token]) return direct[token];
-
-        // AES variants like AES128GCM, AES256GCM, AES256CBC
-        const aes = token.match(/^AES(\d+)(GCM|CBC)$/i);
-        if (aes) {
-            return `AES-${aes[1]}-${aes[2].toUpperCase()}`;
-        }
-
-        // RSA variants like RSA2048, RSA4096
-        const rsa = token.match(/^RSA(\d{4})$/i);
-        if (rsa) {
-            return `RSA-${rsa[1]}`;
-        }
-
-        // ECDSA/ECDH P256: ECDSAP256, ECDHP256
-        const ecdsax = token.match(/^(ECDSA|ECDH)P(\d+)$/i);
-        if (ecdsax) {
-            return `${ecdsax[1].toUpperCase()}-P${ecdsax[2]}`;
-        }
-
-        // Default: return as-is
-        return token;
-    }
-
-    async loadBenchmarkData() {
-        const url = document.getElementById('jsonUrl').value.trim();
-        if (!url) {
-            this.showError('Please enter a valid URL to benchmark results.');
+    // Load data from URL or file
+    async loadData() {
+        // Prevent multiple simultaneous loads
+        if (this.isLoading) {
+            console.log('Load already in progress, skipping...');
             return;
         }
 
-        // Update URL hash
-        window.location.hash = encodeURIComponent(url);
+        const url = document.getElementById('dataUrl').value;
+        if (!url) {
+            this.showError('Please enter a data source URL or path');
+            return;
+        }
 
-        this.showLoading();
+        this.isLoading = true;
+        this.showLoading(true);
 
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                if (response.status === 404) {
+                    throw new Error(`File not found: ${url}. Please ensure result.json exists in the project root or docs folder.`);
+                }
+                throw new Error(`Failed to load data: ${response.statusText} (${response.status})`);
             }
-            
-            const data = await response.json();
-            this.data = this.normalizeData(data);
+
+            this.rawData = await response.json();
+
+            // Validate data structure
+            if (!this.rawData || !this.rawData.benchmarks) {
+                throw new Error('Invalid data format: Missing benchmarks array');
+            }
+
+            this.processData();
             this.renderDashboard();
+
+            // Update last updated time
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+
+            // Show success message briefly
+            console.log(`Successfully loaded ${this.rawData.benchmarks.length} benchmark results`);
         } catch (error) {
-            this.showError(`Failed to load benchmark data: ${error.message}`);
+            if (error.message.includes('Failed to fetch')) {
+                this.showError(`Cannot load ${url}. Please ensure the file exists and the path is correct. For local files, you may need to run a local server.`);
+            } else {
+                this.showError(`Error loading data: ${error.message}`);
+            }
+            console.error('Data loading error:', error);
+        } finally {
+            this.isLoading = false;
+            this.showLoading(false);
         }
     }
 
-    loadSampleData() {
-        // Prefer loading local result.json (checked into docs/) as sample data
-        this.showLoading();
-        fetch('result.json')
-            .then(resp => {
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-                return resp.json();
-            })
-            .then(raw => {
-                this.data = this.normalizeData(raw);
-                this.renderDashboard();
-            })
-            .catch(err => {
-                // Fallback to generated sample if local file is unavailable
-                this.showError(`Failed to load result.json: ${err.message}. Falling back to generated sample data.`);
-                this.data = this.generateSampleData();
-                this.renderDashboard();
-            });
+    // Load sample data (loads actual result.json)
+    async loadSampleData() {
+        // Load the actual result.json file instead of generating sample data
+        document.getElementById('dataUrl').value = 'result.json';
+        await this.loadData();
     }
 
-    generateSampleData() {
-        const libraries = ['Crypto++', 'OpenSSL', 'Botan', 'libsodium', 'mbedTLS'];
-        const algorithms = ['SHA256', 'SHA512', 'AES256GCM', 'ChaCha20Poly1305', 'Ed25519'];
-        const inputSizes = ['1024', '4096', '16384'];
-        const configurations = [];
+    // Process raw benchmark data
+    processData() {
+        if (!this.rawData || !this.rawData.benchmarks) {
+            throw new Error('Invalid data format');
+        }
 
-        libraries.forEach(lib => {
-            [false, true].forEach(pgo => {
-                const benchmarks = [];
-                algorithms.forEach(algo => {
-                    inputSizes.forEach(size => {
-                        // Skip unsupported combinations
-                        if (lib === 'libsodium' && algo === 'SHA3_256') return;
-                        if (lib === 'OpenSSL' && ['Ed25519', 'X25519'].includes(algo)) return;
-
-                        const basePerf = Math.random() * 2000000000; // Base performance
-                        const pgoMultiplier = pgo ? 1.1 + Math.random() * 0.3 : 1.0; // PGO boost
-                        
-                        benchmarks.push({
-                            name: `${lib}/${algo}/${size}`,
-                            library: lib,
-                            algorithm: algo,
-                            input_size: size,
-                            time_ns: Math.floor(1000000000 / (basePerf * pgoMultiplier / parseInt(size))),
-                            bytes_per_second: Math.floor(basePerf * pgoMultiplier),
-                            iterations: Math.floor(Math.random() * 100000) + 10000
-                        });
-                    });
-                });
-
-                configurations.push({
-                    compiler: `${lib.toLowerCase()}-compiler`,
-                    platform: 'ubuntu-latest',
-                    pgo_enabled: pgo,
-                    benchmark_count: benchmarks.length,
-                    benchmarks: benchmarks
-                });
-            });
-        });
-
-        return {
-            summary_metadata: {
-                generated_at: new Date().toISOString(),
-                total_configurations: configurations.length,
-                workflow_run_id: 'sample-123',
-                commit_sha: 'abc123def456',
-                repository: 'user/crypto-bench'
-            },
-            configurations: configurations,
-            performance_comparison: {
-                fastest_by_algorithm: {},
-                compiler_rankings: {},
-                pgo_impact: {}
-            }
+        const processed = {
+            context: this.rawData.context,
+            byLibrary: {},
+            byAlgorithm: {},
+            byCategory: {},
+            aggregates: {}
         };
+
+        // Initialize structures
+        this.libraries.forEach(lib => {
+            processed.byLibrary[lib] = {};
+        });
+
+        // Process each benchmark entry
+        this.rawData.benchmarks.forEach(benchmark => {
+            if (benchmark.run_type !== 'iteration') return;
+
+            const parsed = this.parseBenchmarkName(benchmark.name);
+            if (!parsed) return;
+
+            const { library, algorithm, blockSize } = parsed;
+
+            // Store by library
+            if (!processed.byLibrary[library]) {
+                processed.byLibrary[library] = {};
+            }
+            if (!processed.byLibrary[library][algorithm]) {
+                processed.byLibrary[library][algorithm] = {};
+            }
+
+            processed.byLibrary[library][algorithm][blockSize] = {
+                throughput: benchmark.bytes_per_second / (1024 * 1024), // Convert to MB/s
+                cpuTime: benchmark.cpu_time * 1000000, // Convert to microseconds
+                realTime: benchmark.real_time * 1000000,
+                iterations: benchmark.iterations
+            };
+
+            // Store by algorithm
+            if (!processed.byAlgorithm[algorithm]) {
+                processed.byAlgorithm[algorithm] = {};
+            }
+            if (!processed.byAlgorithm[algorithm][library]) {
+                processed.byAlgorithm[algorithm][library] = {};
+            }
+            processed.byAlgorithm[algorithm][library][blockSize] =
+                processed.byLibrary[library][algorithm][blockSize];
+        });
+
+        // Calculate category aggregates
+        Object.entries(this.categories).forEach(([category, algorithms]) => {
+            processed.byCategory[category] = {};
+
+            this.libraries.forEach(library => {
+                const scores = [];
+
+                algorithms.forEach(algo => {
+                    if (processed.byLibrary[library]?.[algo]) {
+                        const avgThroughput = this.calculateAverageThroughput(
+                            processed.byLibrary[library][algo]
+                        );
+                        if (avgThroughput > 0) {
+                            scores.push(avgThroughput);
+                        }
+                    }
+                });
+
+                if (scores.length > 0) {
+                    processed.byCategory[category][library] = this.geometricMean(scores);
+                }
+            });
+        });
+
+        // Calculate composite scores
+        processed.aggregates = this.calculateCompositeScores(processed);
+
+        this.processedData = processed;
     }
 
-    renderDashboard() {
-        this.hideLoading();
-        if (!this.data || !Array.isArray(this.data.configurations) || this.data.configurations.length === 0) {
-            this.showError('No configurations found in data.');
-            return;
+    // Parse benchmark name to extract components
+    parseBenchmarkName(name) {
+        // Format: BM_Library_Algorithm/BlockSize
+        const match = name.match(/^BM_(\w+)_(\w+)\/(\d+)$/);
+        if (!match) return null;
+
+        const library = this.normalizeLibraryName(match[1]);
+        const algorithm = match[2];
+        const blockSize = parseInt(match[3]);
+
+        return { library, algorithm, blockSize };
+    }
+
+    // Normalize library names
+    normalizeLibraryName(name) {
+        const mapping = {
+            'Cryptopp': 'Crypto++',
+            'OpenSSL': 'OpenSSL',
+            'Botan': 'Botan',
+            'Libsodium': 'Libsodium',
+            'MbedTLS': 'MbedTLS'
+        };
+        return mapping[name] || name;
+    }
+
+    // Calculate average throughput across block sizes
+    calculateAverageThroughput(data) {
+        const values = Object.values(data).map(d => d.throughput).filter(v => v > 0);
+        return values.length > 0 ? values.reduce((a, b) => a + b) / values.length : 0;
+    }
+
+    // Calculate geometric mean
+    geometricMean(values) {
+        if (!values || values.length === 0) return 0;
+        const product = values.reduce((acc, val) => acc * val, 1);
+        return Math.pow(product, 1 / values.length);
+    }
+
+    // Calculate composite scores for each library
+    calculateCompositeScores(data) {
+        const scores = {};
+
+        this.libraries.forEach(library => {
+            const categoryScores = [];
+
+            Object.entries(this.categories).forEach(([category, algorithms]) => {
+                const categoryScore = this.calculateCategoryScore(library, category, data);
+                if (categoryScore > 0) {
+                    categoryScores.push(categoryScore);
+                }
+            });
+
+            if (categoryScores.length > 0) {
+                // Normalize scores relative to best in each category
+                const normalizedScores = this.normalizeScores(categoryScores, data);
+                scores[library] = this.geometricMean(normalizedScores);
+            } else {
+                scores[library] = 0;
+            }
+        });
+
+        return scores;
+    }
+
+    // Calculate score for a specific category
+    calculateCategoryScore(library, category, data) {
+        if (!data.byCategory[category] || !data.byCategory[category][library]) {
+            return 0;
         }
-        this.renderStats();
-        this.renderCharts();
-        document.getElementById('statsGrid').style.display = 'grid';
-        document.getElementById('chartsContainer').style.display = 'block';
+        return data.byCategory[category][library];
     }
 
-    renderStats() {
-        const statsGrid = document.getElementById('statsGrid');
-        statsGrid.innerHTML = '';
+    // Normalize scores relative to best performance
+    normalizeScores(scores, data) {
+        // Find max score in each category for normalization
+        const maxScores = {};
 
-        const totalBenchmarks = this.data.configurations.reduce((sum, config) => sum + config.benchmark_count, 0);
-        const totalConfigurations = this.data.summary_metadata.total_configurations;
-        const avgBenchmarksPerConfig = Math.round(totalBenchmarks / totalConfigurations);
+        Object.keys(this.categories).forEach(category => {
+            const categoryScores = Object.values(data.byCategory[category] || {});
+            maxScores[category] = Math.max(...categoryScores, 0);
+        });
 
-        const stats = [
-            { title: totalConfigurations.toString(), subtitle: 'Configurations Tested' },
-            { title: totalBenchmarks.toString(), subtitle: 'Total Benchmarks' },
-            { title: avgBenchmarksPerConfig.toString(), subtitle: 'Avg per Configuration' },
-            { title: new Date(this.data.summary_metadata.generated_at).toLocaleDateString(), subtitle: 'Generated' }
-        ];
-
-        stats.forEach(stat => {
-            const card = document.createElement('div');
-            card.className = 'stat-card';
-            card.innerHTML = `
-                <h3>${stat.title}</h3>
-                <p>${stat.subtitle}</p>
-            `;
-            statsGrid.appendChild(card);
+        return scores.map((score, index) => {
+            const category = Object.keys(this.categories)[index];
+            return maxScores[category] > 0 ? (score / maxScores[category]) * 100 : 0;
         });
     }
 
-    renderCharts() {
-        const container = document.getElementById('chartsContainer');
-        container.innerHTML = '';
-
-        // Performance by Library Chart
-        this.renderPerformanceByLibrary(container);
-        
-        // PGO Impact Chart
-        this.renderPGOImpact(container);
-        
-        // Algorithm Performance Comparison
-        this.renderAlgorithmComparison(container);
-        
-        // Throughput Heatmap
-        this.renderThroughputHeatmap(container);
-    }
-
-    renderPerformanceByLibrary(container) {
-        const chartCard = document.createElement('div');
-        chartCard.className = 'chart-card';
-        chartCard.innerHTML = `
-            <h2>📈 Performance by Library (MB/s)</h2>
-            <div class="chart-wrapper">
-                <canvas id="performanceChart"></canvas>
-            </div>
-        `;
-        container.appendChild(chartCard);
-
-        // Aggregate performance data by library
-        const libraryData = {};
-        this.data.configurations.forEach(config => {
-            config.benchmarks.forEach(bench => {
-                const key = `${bench.library}${config.pgo_enabled ? ' (PGO)' : ''}`;
-                if (!libraryData[key]) {
-                    libraryData[key] = [];
-                }
-                libraryData[key].push(bench.bytes_per_second / (1024 * 1024)); // Convert to MB/s
-            });
+    // Destroy all existing charts
+    destroyAllCharts() {
+        // Destroy each chart instance
+        Object.keys(this.charts).forEach(chartKey => {
+            if (this.charts[chartKey]) {
+                this.charts[chartKey].destroy();
+                this.charts[chartKey] = null;
+            }
         });
 
-        // Calculate averages
-        const labels = Object.keys(libraryData);
-        const data = labels.map(label => {
-            const values = libraryData[label];
-            return values.reduce((sum, val) => sum + val, 0) / values.length;
-        });
-
-        const ctx = document.getElementById('performanceChart').getContext('2d');
-        this.charts.performance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Average Performance (MB/s)',
-                    data: data,
-                    backgroundColor: labels.map((_, i) => 
-                        labels[i].includes('PGO') ? 'rgba(102, 126, 234, 0.8)' : 'rgba(102, 126, 234, 0.4)'
-                    ),
-                    borderColor: 'rgba(102, 126, 234, 1)',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Performance (MB/s)'
-                        }
-                    }
-                }
+        // Also destroy any charts by canvas ID
+        const chartCanvasIds = ['radarChart', 'categoryChart', 'trendChart', 'scalabilityChart', 'comparisonChart'];
+        chartCanvasIds.forEach(canvasId => {
+            const existingChart = Chart.getChart(canvasId);
+            if (existingChart) {
+                existingChart.destroy();
             }
         });
     }
 
-    renderPGOImpact(container) {
-        const chartCard = document.createElement('div');
-        chartCard.className = 'chart-card';
-        chartCard.innerHTML = `
-            <h2>🚀 Profile-Guided Optimization Impact</h2>
-            <div class="chart-wrapper">
-                <canvas id="pgoChart"></canvas>
-            </div>
-        `;
-        container.appendChild(chartCard);
+    // Main render function
+    renderDashboard() {
+        if (!this.processedData) return;
 
-        // Calculate PGO impact by library
-        const pgoImpact = {};
-        const libraries = [...new Set(this.data.configurations.map(c => c.benchmarks.map(b => b.library)).flat())];
+        // Destroy all existing charts before re-rendering
+        this.destroyAllCharts();
 
-        libraries.forEach(lib => {
-            const noPgoData = [];
-            const pgoData = [];
+        // Update header stats
+        this.updateHeaderStats();
 
-            this.data.configurations.forEach(config => {
-                config.benchmarks.forEach(bench => {
-                    if (bench.library === lib) {
-                        if (config.pgo_enabled) {
-                            pgoData.push(bench.bytes_per_second);
-                        } else {
-                            noPgoData.push(bench.bytes_per_second);
-                        }
-                    }
-                });
-            });
+        // Render overview tab
+        this.renderOverview();
 
-            if (noPgoData.length > 0 && pgoData.length > 0) {
-                const avgNoPgo = noPgoData.reduce((sum, val) => sum + val, 0) / noPgoData.length;
-                const avgPgo = pgoData.reduce((sum, val) => sum + val, 0) / pgoData.length;
-                pgoImpact[lib] = ((avgPgo - avgNoPgo) / avgNoPgo) * 100;
-            }
-        });
+        // Initialize other tabs
+        this.initializeTrendFilters();
+        this.initializeComparisonFilters();
+        this.initializeDetailedFilters();
 
-        const labels = Object.keys(pgoImpact);
-        const data = Object.values(pgoImpact);
-
-        const ctx = document.getElementById('pgoChart').getContext('2d');
-        this.charts.pgo = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'PGO Performance Improvement (%)',
-                    data: data,
-                    backgroundColor: data.map(val => 
-                        val > 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
-                    ),
-                    borderColor: data.map(val => 
-                        val > 0 ? 'rgba(34, 197, 94, 1)' : 'rgba(239, 68, 68, 1)'
-                    ),
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Performance Improvement (%)'
-                        }
-                    }
-                }
-            }
-        });
+        // Render initial charts
+        this.renderRadarChart();
+        this.renderCategoryChart();
+        this.renderHighlights();
     }
 
-    renderAlgorithmComparison(container) {
-        const chartCard = document.createElement('div');
-        chartCard.className = 'chart-card';
-        chartCard.innerHTML = `
-            <h2>🔐 Algorithm Performance Comparison</h2>
-            <div class="chart-wrapper large">
-                <canvas id="algorithmChart"></canvas>
-            </div>
-        `;
-        container.appendChild(chartCard);
+    // Update header statistics
+    updateHeaderStats() {
+        const benchmarkCount = this.rawData.benchmarks.filter(b => b.run_type === 'iteration').length;
+        const libraryCount = this.libraries.filter(lib =>
+            Object.keys(this.processedData.byLibrary[lib] || {}).length > 0
+        ).length;
+        const algorithmCount = Object.keys(this.processedData.byAlgorithm).length;
 
-        // Get unique algorithms and libraries
-        const algorithms = [...new Set(this.data.configurations.map(c => c.benchmarks.map(b => b.algorithm)).flat())];
-        const libraries = [...new Set(this.data.configurations.map(c => c.benchmarks.map(b => b.library)).flat())];
-        
-        const colors = [
-            'rgba(255, 99, 132, 0.8)',
-            'rgba(54, 162, 235, 0.8)',
-            'rgba(255, 205, 86, 0.8)',
-            'rgba(75, 192, 192, 0.8)',
-            'rgba(153, 102, 255, 0.8)'
-        ];
+        document.getElementById('totalBenchmarks').textContent = benchmarkCount.toLocaleString();
+        document.getElementById('totalLibraries').textContent = libraryCount;
+        document.getElementById('totalAlgorithms').textContent = algorithmCount;
+    }
 
-        const datasets = libraries.map((lib, index) => {
-            const data = algorithms.map(algo => {
-                const benchmarks = [];
-                this.data.configurations.forEach(config => {
-                    config.benchmarks.forEach(bench => {
-                        if (bench.library === lib && bench.algorithm === algo) {
-                            benchmarks.push(bench.bytes_per_second);
-                        }
-                    });
-                });
-                
-                if (benchmarks.length === 0) return 0;
-                return benchmarks.reduce((sum, val) => sum + val, 0) / benchmarks.length / (1024 * 1024);
+    // Render overview section
+    renderOverview() {
+        // Find top performer
+        const scores = this.processedData.aggregates;
+        const topLibrary = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+
+        if (topLibrary) {
+            document.getElementById('topLibrary').textContent = topLibrary[0];
+            document.getElementById('topScore').textContent = topLibrary[1].toFixed(1);
+        }
+    }
+
+    // Render radar chart for composite scores
+    renderRadarChart() {
+        const ctx = document.getElementById('radarChart')?.getContext('2d');
+        if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.radar) {
+            this.charts.radar.destroy();
+            this.charts.radar = null; // Clear the reference
+        }
+
+        // Also check if Chart.js has any existing chart on this canvas
+        const existingChart = Chart.getChart('radarChart');
+        if (existingChart) {
+            existingChart.destroy();
+        }
+
+        const labels = Object.keys(this.categories).map(cat =>
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+        );
+
+        const datasets = this.libraries.map(library => {
+            const data = labels.map(label => {
+                const category = label.toLowerCase();
+                return this.processedData.byCategory[category]?.[library] || 0;
             });
 
             return {
-                label: lib,
+                label: library,
                 data: data,
-                backgroundColor: colors[index % colors.length],
-                borderColor: colors[index % colors.length].replace('0.8', '1'),
-                borderWidth: 2
+                borderColor: this.colorScheme[library],
+                backgroundColor: this.colorScheme[library] + '33',
+                borderWidth: 2,
+                pointRadius: 4
             };
         });
 
-        const ctx = document.getElementById('algorithmChart').getContext('2d');
-        this.charts.algorithm = new Chart(ctx, {
-            type: 'bar',
+        this.charts.radar = new Chart(ctx, {
+            type: 'radar',
             data: {
-                labels: algorithms,
-                datasets: datasets
+                labels: labels,
+                datasets: datasets.filter(d => d.data.some(v => v > 0))
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'top'
+                        position: 'bottom'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Multi-Dimensional Performance Profile'
                     }
                 },
                 scales: {
-                    y: {
+                    r: {
                         beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Performance (MB/s)'
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(0) + ' MB/s';
+                            }
                         }
                     }
                 }
@@ -665,73 +439,56 @@ class CryptoBenchDashboard {
         });
     }
 
-    renderThroughputHeatmap(container) {
-        const chartCard = document.createElement('div');
-        chartCard.className = 'chart-card';
-        chartCard.innerHTML = `
-            <h2>🔥 Throughput Heatmap by Input Size</h2>
-            <div class="chart-wrapper large">
-                <canvas id="heatmapChart"></canvas>
-            </div>
-        `;
-        container.appendChild(chartCard);
+    // Render category performance chart
+    renderCategoryChart() {
+        const ctx = document.getElementById('categoryChart')?.getContext('2d');
+        if (!ctx) return;
 
-        // Create scatter plot data for heatmap effect
-        const scatterData = [];
-        const libraries = [...new Set(this.data.configurations.map(c => c.benchmarks.map(b => b.library)).flat())];
-        const colors = [
-            'rgba(255, 99, 132, 0.6)',
-            'rgba(54, 162, 235, 0.6)',
-            'rgba(255, 205, 86, 0.6)',
-            'rgba(75, 192, 192, 0.6)',
-            'rgba(153, 102, 255, 0.6)'
-        ];
+        // Destroy existing chart if it exists
+        if (this.charts.category) {
+            this.charts.category.destroy();
+            this.charts.category = null;
+        }
 
-        libraries.forEach((lib, libIndex) => {
-            const points = [];
-            this.data.configurations.forEach(config => {
-                config.benchmarks.forEach(bench => {
-                    if (bench.library === lib) {
-                        points.push({
-                            x: parseInt(bench.input_size),
-                            y: bench.bytes_per_second / (1024 * 1024)
-                        });
-                    }
-                });
-            });
+        // Also check if Chart.js has any existing chart on this canvas
+        const existingChart = Chart.getChart('categoryChart');
+        if (existingChart) {
+            existingChart.destroy();
+        }
 
-            scatterData.push({
-                label: lib,
-                data: points,
-                backgroundColor: colors[libIndex % colors.length],
-                borderColor: colors[libIndex % colors.length].replace('0.6', '1'),
-                pointRadius: 6,
-                pointHoverRadius: 8
-            });
+        const categories = Object.keys(this.categories);
+        const datasets = this.libraries.map(library => {
+            const data = categories.map(category =>
+                this.processedData.byCategory[category]?.[library] || 0
+            );
+
+            return {
+                label: library,
+                data: data,
+                backgroundColor: this.colorScheme[library],
+                borderWidth: 1
+            };
         });
 
-        const ctx = document.getElementById('heatmapChart').getContext('2d');
-        this.charts.heatmap = new Chart(ctx, {
-            type: 'scatter',
+        this.charts.category = new Chart(ctx, {
+            type: 'bar',
             data: {
-                datasets: scatterData
+                labels: categories.map(c => c.charAt(0).toUpperCase() + c.slice(1)),
+                datasets: datasets.filter(d => d.data.some(v => v > 0))
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'top'
+                        position: 'bottom'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Average Performance by Algorithm Category'
                     }
                 },
                 scales: {
-                    x: {
-                        type: 'logarithmic',
-                        title: {
-                            display: true,
-                            text: 'Input Size (bytes)'
-                        }
-                    },
                     y: {
                         beginAtZero: true,
                         title: {
@@ -743,18 +500,611 @@ class CryptoBenchDashboard {
             }
         });
     }
+
+    // Render performance highlights
+    renderHighlights() {
+        const highlightsGrid = document.getElementById('highlightsGrid');
+        if (!highlightsGrid) return;
+
+        highlightsGrid.innerHTML = '';
+
+        // Find best performers for each category
+        Object.entries(this.categories).forEach(([category, algorithms]) => {
+            const categoryData = this.processedData.byCategory[category];
+            if (!categoryData) return;
+
+            const best = Object.entries(categoryData).sort((a, b) => b[1] - a[1])[0];
+            if (!best) return;
+
+            const card = document.createElement('div');
+            card.className = 'highlight-card';
+            card.innerHTML = `
+                <div class="highlight-title">Best ${category.toUpperCase()}</div>
+                <div class="highlight-value">${best[0]}</div>
+                <div class="highlight-detail">${best[1].toFixed(2)} MB/s avg</div>
+            `;
+            highlightsGrid.appendChild(card);
+        });
+    }
+
+    // Initialize trend tab filters
+    initializeTrendFilters() {
+        const librarySelect = document.getElementById('trendLibrary');
+        const algorithmSelect = document.getElementById('trendAlgorithm');
+
+        if (librarySelect) {
+            librarySelect.innerHTML = '<option value="all">All Libraries</option>';
+            this.libraries.forEach(lib => {
+                if (Object.keys(this.processedData.byLibrary[lib] || {}).length > 0) {
+                    librarySelect.innerHTML += `<option value="${lib}">${lib}</option>`;
+                }
+            });
+        }
+
+        if (algorithmSelect) {
+            algorithmSelect.innerHTML = '<option value="all">All Algorithms</option>';
+            Object.keys(this.processedData.byAlgorithm).forEach(algo => {
+                algorithmSelect.innerHTML += `<option value="${algo}">${algo}</option>`;
+            });
+        }
+    }
+
+    // Update trend charts
+    updateTrends() {
+        const library = document.getElementById('trendLibrary')?.value || 'all';
+        const algorithm = document.getElementById('trendAlgorithm')?.value || 'all';
+
+        this.renderTrendChart(library, algorithm);
+        this.renderScalabilityChart(library, algorithm);
+    }
+
+    // Render trend chart (throughput vs block size)
+    renderTrendChart(library = 'all', algorithm = 'all') {
+        const ctx = document.getElementById('trendChart')?.getContext('2d');
+        if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.trend) {
+            this.charts.trend.destroy();
+            this.charts.trend = null;
+        }
+
+        // Also check if Chart.js has any existing chart on this canvas
+        const existingChart = Chart.getChart('trendChart');
+        if (existingChart) {
+            existingChart.destroy();
+        }
+
+        const datasets = [];
+
+        if (library === 'all' && algorithm === 'all') {
+            // Show average for each library
+            this.libraries.forEach(lib => {
+                const data = this.blockSizes.map(size => {
+                    const values = [];
+                    Object.keys(this.processedData.byLibrary[lib] || {}).forEach(algo => {
+                        const value = this.processedData.byLibrary[lib][algo]?.[size]?.throughput;
+                        if (value) values.push(value);
+                    });
+                    return values.length > 0 ? values.reduce((a, b) => a + b) / values.length : null;
+                });
+
+                if (data.some(v => v !== null)) {
+                    datasets.push({
+                        label: lib,
+                        data: data,
+                        borderColor: this.colorScheme[lib],
+                        backgroundColor: this.colorScheme[lib] + '33',
+                        borderWidth: 2,
+                        tension: 0.2
+                    });
+                }
+            });
+        } else if (library !== 'all' && algorithm === 'all') {
+            // Show all algorithms for specific library
+            Object.keys(this.processedData.byLibrary[library] || {}).forEach(algo => {
+                const data = this.blockSizes.map(size =>
+                    this.processedData.byLibrary[library][algo]?.[size]?.throughput || null
+                );
+
+                if (data.some(v => v !== null)) {
+                    datasets.push({
+                        label: algo,
+                        data: data,
+                        borderWidth: 2,
+                        tension: 0.2
+                    });
+                }
+            });
+        } else if (library === 'all' && algorithm !== 'all') {
+            // Show all libraries for specific algorithm
+            this.libraries.forEach(lib => {
+                const data = this.blockSizes.map(size =>
+                    this.processedData.byAlgorithm[algorithm]?.[lib]?.[size]?.throughput || null
+                );
+
+                if (data.some(v => v !== null)) {
+                    datasets.push({
+                        label: lib,
+                        data: data,
+                        borderColor: this.colorScheme[lib],
+                        backgroundColor: this.colorScheme[lib] + '33',
+                        borderWidth: 2,
+                        tension: 0.2
+                    });
+                }
+            });
+        } else {
+            // Show specific library and algorithm
+            const data = this.blockSizes.map(size =>
+                this.processedData.byLibrary[library]?.[algorithm]?.[size]?.throughput || null
+            );
+
+            if (data.some(v => v !== null)) {
+                datasets.push({
+                    label: `${library} - ${algorithm}`,
+                    data: data,
+                    borderColor: this.colorScheme[library],
+                    backgroundColor: this.colorScheme[library] + '33',
+                    borderWidth: 2,
+                    tension: 0.2
+                });
+            }
+        }
+
+        this.charts.trend = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: this.blockSizes.map(s => s + ' bytes'),
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Performance Trends: Throughput vs Block Size'
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Block Size'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Throughput (MB/s)'
+                        },
+                        type: 'logarithmic'
+                    }
+                }
+            }
+        });
+    }
+
+    // Render scalability chart
+    renderScalabilityChart(library = 'all', algorithm = 'all') {
+        const ctx = document.getElementById('scalabilityChart')?.getContext('2d');
+        if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.scalability) {
+            this.charts.scalability.destroy();
+            this.charts.scalability = null;
+        }
+
+        // Also check if Chart.js has any existing chart on this canvas
+        const existingChart = Chart.getChart('scalabilityChart');
+        if (existingChart) {
+            existingChart.destroy();
+        }
+
+        // Calculate scalability factor (throughput ratio between largest and smallest block size)
+        const scalabilityData = [];
+        const labels = [];
+
+        if (algorithm === 'all') {
+            // Show scalability for all algorithms
+            Object.keys(this.processedData.byAlgorithm).forEach(algo => {
+                const libraryData = library === 'all' ?
+                    this.libraries : [library];
+
+                libraryData.forEach(lib => {
+                    const small = this.processedData.byAlgorithm[algo]?.[lib]?.[64]?.throughput;
+                    const large = this.processedData.byAlgorithm[algo]?.[lib]?.[16384]?.throughput;
+
+                    if (small && large) {
+                        scalabilityData.push(large / small);
+                        labels.push(`${lib} - ${algo}`);
+                    }
+                });
+            });
+        } else {
+            // Show scalability for specific algorithm
+            const libraryData = library === 'all' ? this.libraries : [library];
+
+            libraryData.forEach(lib => {
+                const small = this.processedData.byAlgorithm[algorithm]?.[lib]?.[64]?.throughput;
+                const large = this.processedData.byAlgorithm[algorithm]?.[lib]?.[16384]?.throughput;
+
+                if (small && large) {
+                    scalabilityData.push(large / small);
+                    labels.push(lib);
+                }
+            });
+        }
+
+        this.charts.scalability = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Scalability Factor (16384/64 bytes)',
+                    data: scalabilityData,
+                    backgroundColor: '#6366f1',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Scalability Analysis: Performance Improvement with Larger Blocks'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Scalability Factor'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Initialize comparison filters
+    initializeComparisonFilters() {
+        // Filters are already populated in HTML
+    }
+
+    // Update comparison charts
+    updateComparison() {
+        const category = document.getElementById('compCategory')?.value || 'hash';
+        const blockSize = parseInt(document.getElementById('compBlockSize')?.value || '1024');
+
+        this.renderComparisonChart(category, blockSize);
+        this.renderPerformanceMatrix(category, blockSize);
+    }
+
+    // Render library comparison chart
+    renderComparisonChart(category, blockSize) {
+        const ctx = document.getElementById('comparisonChart')?.getContext('2d');
+        if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.comparison) {
+            this.charts.comparison.destroy();
+            this.charts.comparison = null;
+        }
+
+        // Also check if Chart.js has any existing chart on this canvas
+        const existingChart = Chart.getChart('comparisonChart');
+        if (existingChart) {
+            existingChart.destroy();
+        }
+
+        const algorithms = this.categories[category] || [];
+        const datasets = [];
+
+        this.libraries.forEach(library => {
+            const data = algorithms.map(algo =>
+                this.processedData.byLibrary[library]?.[algo]?.[blockSize]?.throughput || 0
+            );
+
+            if (data.some(v => v > 0)) {
+                datasets.push({
+                    label: library,
+                    data: data,
+                    backgroundColor: this.colorScheme[library],
+                    borderWidth: 1
+                });
+            }
+        });
+
+        this.charts.comparison = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: algorithms,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    title: {
+                        display: true,
+                        text: `${category.toUpperCase()} Performance Comparison (${blockSize} bytes)`
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Throughput (MB/s)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Render performance matrix
+    renderPerformanceMatrix(category, blockSize) {
+        const container = document.getElementById('performanceMatrix');
+        if (!container) return;
+
+        const algorithms = this.categories[category] || [];
+
+        let html = '<table class="performance-matrix"><thead><tr><th>Algorithm</th>';
+        this.libraries.forEach(lib => {
+            html += `<th>${lib}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        algorithms.forEach(algo => {
+            html += `<tr><td><strong>${algo}</strong></td>`;
+
+            const values = this.libraries.map(lib =>
+                this.processedData.byLibrary[lib]?.[algo]?.[blockSize]?.throughput || 0
+            );
+            const maxValue = Math.max(...values);
+            const minValue = Math.min(...values.filter(v => v > 0));
+
+            this.libraries.forEach(lib => {
+                const value = this.processedData.byLibrary[lib]?.[algo]?.[blockSize]?.throughput || 0;
+                let className = '';
+                if (value === maxValue && value > 0) className = 'best';
+                else if (value === minValue && value > 0) className = 'worst';
+
+                html += `<td class="${className}">${value > 0 ? value.toFixed(2) + ' MB/s' : 'N/A'}</td>`;
+            });
+
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    // Initialize detailed analysis filters
+    initializeDetailedFilters() {
+        const algorithmSelect = document.getElementById('detailAlgorithm');
+        if (!algorithmSelect) return;
+
+        algorithmSelect.innerHTML = '<option value="">Choose an algorithm...</option>';
+        Object.keys(this.processedData.byAlgorithm).forEach(algo => {
+            algorithmSelect.innerHTML += `<option value="${algo}">${algo}</option>`;
+        });
+
+        // Populate data table
+        this.populateDataTable();
+    }
+
+    // Analyze specific algorithm
+    analyzeAlgorithm() {
+        const algorithm = document.getElementById('detailAlgorithm')?.value;
+        if (!algorithm) return;
+
+        this.renderStatisticalAnalysis(algorithm);
+    }
+
+    // Render statistical analysis
+    renderStatisticalAnalysis(algorithm) {
+        const statsGrid = document.getElementById('statsGrid');
+        if (!statsGrid) return;
+
+        statsGrid.innerHTML = '';
+
+        this.libraries.forEach(library => {
+            const data = this.processedData.byAlgorithm[algorithm]?.[library];
+            if (!data) return;
+
+            const throughputs = Object.values(data).map(d => d.throughput);
+            const cpuTimes = Object.values(data).map(d => d.cpuTime);
+
+            const stats = {
+                'Avg Throughput': this.mean(throughputs).toFixed(2) + ' MB/s',
+                'Max Throughput': Math.max(...throughputs).toFixed(2) + ' MB/s',
+                'Min Throughput': Math.min(...throughputs).toFixed(2) + ' MB/s',
+                'Avg CPU Time': this.mean(cpuTimes).toFixed(2) + ' μs'
+            };
+
+            const card = document.createElement('div');
+            card.innerHTML = `<h4>${library}</h4>`;
+
+            Object.entries(stats).forEach(([label, value]) => {
+                const item = document.createElement('div');
+                item.className = 'stat-item';
+                item.innerHTML = `
+                    <div class="stat-item-label">${label}</div>
+                    <div class="stat-item-value">${value}</div>
+                `;
+                card.appendChild(item);
+            });
+
+            statsGrid.appendChild(card);
+        });
+    }
+
+    // Calculate mean
+    mean(values) {
+        if (!values || values.length === 0) return 0;
+        return values.reduce((a, b) => a + b) / values.length;
+    }
+
+    // Populate data table
+    populateDataTable() {
+        const tbody = document.getElementById('tableBody');
+        if (!tbody) return;
+
+        const rows = [];
+
+        Object.entries(this.processedData.byLibrary).forEach(([library, algorithms]) => {
+            Object.entries(algorithms).forEach(([algorithm, sizes]) => {
+                Object.entries(sizes).forEach(([blockSize, data]) => {
+                    rows.push({
+                        library,
+                        algorithm,
+                        blockSize: parseInt(blockSize),
+                        throughput: data.throughput,
+                        cpuTime: data.cpuTime
+                    });
+                });
+            });
+        });
+
+        this.tableData = rows;
+        this.renderTable(rows);
+    }
+
+    // Render table rows
+    renderTable(rows) {
+        const tbody = document.getElementById('tableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = rows.map(row => `
+            <tr>
+                <td>${row.library}</td>
+                <td>${row.algorithm}</td>
+                <td>${row.blockSize} bytes</td>
+                <td>${row.throughput.toFixed(2)}</td>
+                <td>${row.cpuTime.toFixed(2)}</td>
+                <td>-</td>
+                <td>-</td>
+            </tr>
+        `).join('');
+    }
+
+    // Filter table
+    filterTable(searchText) {
+        if (!this.tableData) return;
+
+        const filtered = this.tableData.filter(row =>
+            row.library.toLowerCase().includes(searchText.toLowerCase()) ||
+            row.algorithm.toLowerCase().includes(searchText.toLowerCase())
+        );
+
+        this.renderTable(filtered);
+    }
+
+    // Sort table
+    sortTable(sortBy) {
+        if (!this.tableData) return;
+
+        const sorted = [...this.tableData];
+
+        switch(sortBy) {
+            case 'throughput':
+                sorted.sort((a, b) => b.throughput - a.throughput);
+                break;
+            case 'library':
+                sorted.sort((a, b) => a.library.localeCompare(b.library));
+                break;
+            case 'algorithm':
+                sorted.sort((a, b) => a.algorithm.localeCompare(b.algorithm));
+                break;
+        }
+
+        this.renderTable(sorted);
+    }
+
+    // Export data to CSV
+    exportData() {
+        if (!this.tableData) return;
+
+        const csv = [
+            'Library,Algorithm,Block Size,Throughput (MB/s),CPU Time (μs)',
+            ...this.tableData.map(row =>
+                `${row.library},${row.algorithm},${row.blockSize},${row.throughput.toFixed(2)},${row.cpuTime.toFixed(2)}`
+            )
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'crypto-bench-results.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // Show loading indicator
+    showLoading(show) {
+        const indicator = document.getElementById('loadingIndicator');
+        if (indicator) {
+            indicator.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    // Show error message
+    showError(message) {
+        const errorModal = document.getElementById('errorModal');
+        const errorMessage = document.getElementById('errorMessage');
+
+        if (errorModal && errorMessage) {
+            errorMessage.textContent = message;
+            errorModal.style.display = 'flex';
+        }
+    }
+
+    // Close error modal
+    closeError() {
+        const errorModal = document.getElementById('errorModal');
+        if (errorModal) {
+            errorModal.style.display = 'none';
+        }
+    }
+
 }
 
-// Global functions
-function loadBenchmarkData() {
-    window.dashboard.loadBenchmarkData();
-}
-
-function loadSampleData() {
-    window.dashboard.loadSampleData();
-}
-
-// Initialize dashboard when page loads
+// Initialize dashboard on page load
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboard = new CryptoBenchDashboard();
+
+    // Check for URL parameter first
+    const urlParams = new URLSearchParams(window.location.search);
+    const dataUrl = urlParams.get('data');
+
+    if (dataUrl) {
+        // Use URL parameter if provided
+        document.getElementById('dataUrl').value = dataUrl;
+        window.dashboard.loadData();
+    } else {
+        // Default to loading result.json automatically
+        document.getElementById('dataUrl').value = 'result.json';
+        // Auto-load the result.json file
+        setTimeout(() => {
+            window.dashboard.loadData();
+        }, 500); // Small delay to ensure DOM is fully ready
+    }
 });
