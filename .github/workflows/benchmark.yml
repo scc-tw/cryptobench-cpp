@@ -43,7 +43,7 @@ jobs:
         apt-get install -y \
           perl python3 python3-pip \
           libtool autoconf automake
-        pip3 install jsonschema jinja2
+        pip3 install jsonschema jinja2 --break-system-packages
 
     - name: Verify GCC 15
       run: |
@@ -238,7 +238,7 @@ jobs:
           libtool autoconf automake \
           llvm-22 llvm-22-tools \
           || echo "Some LLVM tools may not be available"
-        pip3 install jsonschema jinja2
+        pip3 install jsonschema jinja2 --break-system-packages
         
         # Create symlinks for LLVM tools if they exist with version suffix
         if [ -f /usr/bin/llvm-ar-22 ]; then
@@ -491,7 +491,7 @@ jobs:
         echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         # Install Python dependencies
         python --version
-        pip install jsonschema jinja2
+        pip install jsonschema jinja2 --break-system-packages
 
     - name: Cache dependencies
       uses: actions/cache@v4
