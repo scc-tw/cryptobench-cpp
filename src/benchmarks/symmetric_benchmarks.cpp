@@ -42,7 +42,7 @@ void BM_SymmetricEncrypt(benchmark::State& state, SymmetricFactory factory) {
     
     // Pre-allocate buffers
     std::vector<uint8_t> plaintext(data_size);
-    std::vector<uint8_t> ciphertext(data_size);
+    std::vector<uint8_t> ciphertext(data_size + 16); // allow up to one full block of padding
     std::vector<uint8_t> key(cipher->key_size());
     std::vector<uint8_t> iv(cipher->iv_size());
     std::vector<uint8_t> tag(cipher->tag_size());

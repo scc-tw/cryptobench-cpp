@@ -306,6 +306,9 @@ void OpenSSLAES256CBC::encrypt_cbc(
         throw std::runtime_error("AES-256-CBC encrypt init failed");
     }
 
+    // Disable padding since benchmark inputs are multiples of 16 bytes
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
     if (EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC encrypt update failed");
@@ -336,6 +339,9 @@ void OpenSSLAES256CBC::decrypt_cbc(
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC decrypt init failed");
     }
+
+    // Disable padding to match encrypt side for benchmark
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
 
     if (EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
