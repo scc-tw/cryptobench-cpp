@@ -11,6 +11,22 @@ set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "Disable install" FORCE)
 set(BENCHMARK_DOWNLOAD_DEPENDENCIES OFF CACHE BOOL "Don't download dependencies" FORCE)
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable GTest tests" FORCE)
 
+# Fix for Windows regex support - force use of std::regex
+if(WIN32 OR MSVC)
+    set(HAVE_STD_REGEX ON CACHE BOOL "Use std::regex" FORCE)
+    set(HAVE_GNU_POSIX_REGEX OFF CACHE BOOL "Don't use GNU regex" FORCE)
+    set(HAVE_POSIX_REGEX OFF CACHE BOOL "Don't use POSIX regex" FORCE)
+    # Ensure C++11 or later for std::regex support
+    set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard" FORCE)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "C++ standard required" FORCE)
+    # Alternative: Disable regex completely if needed
+    # set(BENCHMARK_ENABLE_LIBPFM OFF CACHE BOOL "Disable libpfm" FORCE)
+    # set(RUN_HAVE_STD_REGEX 0 CACHE STRING "Disable regex test" FORCE)
+endif()
+
+# Additional fallback for regex issues - use no regex backend
+set(BENCHMARK_USE_BUNDLED_GTEST OFF CACHE BOOL "Don't use bundled GTest" FORCE)
+
 # Use the same optimization flags for Google Benchmark
 set(BENCHMARK_CXX_FLAGS "${CRYPTO_BENCH_CXX_FLAGS_STR}" CACHE STRING "Benchmark C++ flags" FORCE)
 
