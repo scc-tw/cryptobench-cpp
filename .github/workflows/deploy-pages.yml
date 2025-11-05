@@ -1,0 +1,137 @@
+name: Deploy Performance Dashboard
+
+on:
+  workflow_run:
+    workflows: ["Crypto-Bench Performance Testing"]
+    types:
+      - completed
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download benchmark artifacts
+      if: github.event.workflow_run.conclusion == 'success'
+      uses: actions/download-artifact@v4
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ github.event.workflow_run.id }}
+        path: ./benchmark-results
+
+    - name: Copy results to docs
+      if: github.event.workflow_run.conclusion == 'success'
+      run: |
+        # Copy all JSON results to docs directory for web access
+        mkdir -p docs/results
+        find ./benchmark-results -name "*.json" -exec cp {} docs/results/ \;
+        
+        # Create an index of available results
+        ls docs/results/*.json > docs/results/index.txt
+        
+        # Generate results manifest
+        cat > docs/results/manifest.json << 'EOF'
+        {
+          "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "workflow_run_id": "${{ github.event.workflow_run.id }}",
+          "commit_sha": "${{ github.sha }}",
+          "available_files": [
+        EOF
+        
+        # Add file list to manifest
+        first=true
+        for file in docs/results/*.json; do
+          if [ "$file" != "docs/results/manifest.json" ]; then
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo "," >> docs/results/manifest.json
+            fi
+            filename=$(basename "$file")
+            echo "    \"$filename\"" >> docs/results/manifest.json
+          fi
+        done
+        
+        cat >> docs/results/manifest.json << 'EOF'
+          ]
+        }
+        EOF
+
+    - name: Create sample data (fallback)
+      if: github.event.workflow_run.conclusion != 'success'
+      run: |
+        mkdir -p docs/results
+        cat > docs/results/sample_performance_summary.json << 'EOF'
+        {
+          "summary_metadata": {
+            "generated_at": "2024-11-05T10:00:00Z",
+            "total_configurations": 6,
+            "workflow_run_id": "sample",
+            "commit_sha": "sample123",
+            "repository": "crypto-bench"
+          },
+          "configurations": [
+            {
+              "compiler": "gcc-15",
+              "platform": "ubuntu-latest",
+              "pgo_enabled": false,
+              "benchmark_count": 20,
+              "benchmarks": [
+                {
+                  "name": "Crypto++/SHA256/4096",
+                  "library": "Crypto++",
+                  "algorithm": "SHA256",
+                  "input_size": "4096",
+                  "time_ns": 2154000,
+                  "bytes_per_second": 1946157056,
+                  "iterations": 325021
+                },
+                {
+                  "name": "OpenSSL/SHA256/4096", 
+                  "library": "OpenSSL",
+                  "algorithm": "SHA256",
+                  "input_size": "4096",
+                  "time_ns": 1876000,
+                  "bytes_per_second": 2184533504,
+                  "iterations": 373213
+                }
+              ]
+            }
+          ],
+          "performance_comparison": {
+            "fastest_by_algorithm": {},
+            "compiler_rankings": {},
+            "pgo_impact": {}
+          }
+        }
+        EOF
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './docs'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

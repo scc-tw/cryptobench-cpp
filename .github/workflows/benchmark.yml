@@ -183,7 +183,7 @@ jobs:
         EOF
 
     - name: Upload Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: gcc15-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
         path: |
@@ -356,7 +356,7 @@ jobs:
         EOF
 
     - name: Upload Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: clang22-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
         path: |
@@ -532,7 +532,7 @@ jobs:
         EOF
 
     - name: Upload Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: msvc2022-${{ matrix.pgo && 'pgo' || 'nopgo' }}-results
         path: |
@@ -653,7 +653,7 @@ jobs:
         EOF
 
     - name: Upload Performance Summary
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: performance-summary
         path: |
@@ -715,8 +715,53 @@ jobs:
         EOF
 
     - name: Upload Performance Report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: performance-report
         path: PERFORMANCE_REPORT.md
         retention-days: 90
+
+    - name: Create GitHub Release with Results
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        # Create a release with timestamp for easy access
+        TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+        RELEASE_TAG="results-$TIMESTAMP"
+        
+        # Create release notes
+        cat > release_notes.md << 'EOF'
+        # Crypto-Bench Performance Results
+        
+        **Generated:** $(date -u)
+        **Commit:** ${{ github.sha }}
+        **Workflow Run:** ${{ github.run_id }}
+        
+        ## 📊 Results Included
+        - Complete performance summary across all compilers
+        - Individual compiler results (with and without PGO)
+        - Performance comparison analysis
+        - Human-readable performance report
+        
+        ## 🌐 View Dashboard
+        Load the `performance_summary.json` file in the [Performance Dashboard](https://github.com/${{ github.repository }}/pages) to visualize these results.
+        
+        ## 📈 Quick Stats
+        - **Configurations Tested:** $(cat performance_summary.json | grep -o '"total_configurations":[0-9]*' | cut -d':' -f2)
+        - **Total Benchmarks:** $(find results/ -name "*_processed.json" -exec cat {} \; | grep -o '"benchmark_count":[0-9]*' | cut -d':' -f2 | awk '{sum+=$1} END {print sum}')
+        EOF
+        
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+        echo "Release tag: $RELEASE_TAG"
+
+    - name: Upload results to release
+      if: github.event_name == 'workflow_dispatch'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Create release
+        gh release create ${{ env.RELEASE_TAG }} \
+          --title "Performance Results $(date -u +%Y-%m-%d)" \
+          --notes-file release_notes.md \
+          performance_summary.json \
+          results/*_processed.json \
+          PERFORMANCE_REPORT.md

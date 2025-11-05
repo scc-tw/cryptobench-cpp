@@ -45,10 +45,11 @@ This suite benchmarks the **16 most commonly used cryptographic functions** in p
 ## 🔧 Build Requirements
 
 ### Prerequisites
-- C++20 or later compiler (GCC 9+, Clang 10+, or MSVC 2019+)
+- C++20 or later compiler (GCC 10+, Clang 12+, or MSVC 2019+)
 - CMake 3.16 or later
 - Git for fetching dependencies
 - Python 3.6+ (for build scripts and PGO training)
+- Perl (required for OpenSSL build system)
 
 ### Important Build Constraints
 
@@ -142,6 +143,100 @@ make clean && make -j$(nproc)
 ./crypto-bench
 ```
 
+## 🌐 Performance Dashboard
+
+This project includes an **interactive web dashboard** for visualizing benchmark results across all compilers and libraries.
+
+### **Live Dashboard**
+The dashboard is automatically deployed to GitHub Pages at:
+`https://[username].github.io/crypto-bench/`
+
+### **Dashboard Features**
+- **📈 Performance by Library**: Bar charts comparing average throughput across libraries
+- **🚀 PGO Impact Analysis**: Shows performance improvement from Profile-Guided Optimization  
+- **🔐 Algorithm Comparison**: Side-by-side comparison of all cryptographic algorithms
+- **🔥 Throughput Heatmap**: Performance vs input size scatter plot
+- **📊 Algorithm Support Matrix**: Shows which algorithms are supported by each library
+
+### **Algorithm Support Status**
+
+| Algorithm | Crypto++ | OpenSSL | Botan | libsodium | mbedTLS |
+|-----------|----------|---------|-------|-----------|---------|
+| **Hash Functions** |
+| SHA-256 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SHA-512 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SHA3-256 | ✅ | ✅ | ✅ | ❌ | ✅ |
+| BLAKE2b | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Symmetric Encryption** |
+| AES-128-GCM | ✅ | ✅ | ✅ | ❌ | ✅ |
+| AES-256-GCM | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AES-256-CBC | ✅ | ✅ | ✅ | ❌ | ✅ |
+| ChaCha20-Poly1305 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Asymmetric Cryptography** |
+| RSA-2048 | ✅ | 🚧 | ✅ | ❌ | ✅ |
+| RSA-4096 | ✅ | 🚧 | ✅ | ❌ | ✅ |
+| ECDSA-P256 | ✅ | 🚧 | ✅ | ❌ | ✅ |
+| Ed25519 | ✅ | 🚧 | ✅ | ✅ | ✅ |
+| **Key Exchange** |
+| ECDH-P256 | ✅ | 🚧 | ✅ | ❌ | ✅ |
+| X25519 | ✅ | 🚧 | ✅ | ✅ | ✅ |
+| **Message Authentication** |
+| HMAC-SHA256 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Poly1305 | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+**Legend:**
+- ✅ **Fully Implemented**: Complete working implementation
+- 🚧 **Stub Implementation**: Interface exists but throws "not implemented" errors  
+- ❌ **Not Supported**: Library doesn't provide this algorithm
+
+### **Loading Benchmark Data**
+
+#### **From GitHub Actions (Automated)**
+1. Run the benchmark workflow: Actions → "Crypto-Bench Performance Testing" → Run workflow
+2. Results are automatically published to GitHub releases
+3. Dashboard loads results from the release URL
+
+#### **Manual Upload**
+```bash
+# Upload results to GitHub release
+gh release create v1.0.0-results performance_summary.json
+
+# Use in dashboard
+https://github.com/[username]/crypto-bench/releases/download/v1.0.0-results/performance_summary.json
+```
+
+## 🚀 Automated CI/CD Testing
+
+This project includes comprehensive GitHub Actions workflows for automated performance testing across multiple compilers.
+
+### **Multi-Compiler Testing**
+- **GCC 15**: Latest development version using [mattkretz/cplusplus-ci](https://github.com/mattkretz/cplusplus-ci)
+- **Clang 22**: Cutting-edge LLVM compiler
+- **MSVC 2022**: Latest Microsoft Visual Studio compiler
+
+### **Performance Optimization Testing**
+Each compiler is tested with:
+- ✅ **Link-Time Optimization (LTO)**: Enabled for maximum performance
+- ✅ **Profile-Guided Optimization (PGO)**: Both with and without PGO
+- ✅ **Native CPU optimizations**: `-march=native` for hardware-specific optimization
+- ✅ **Maximum optimization level**: `-O3` for all libraries
+
+### **Running CI Benchmarks**
+```bash
+# Manual trigger via GitHub Actions UI
+Actions → "Crypto-Bench Performance Testing" → Run workflow
+
+# Optional: Filter specific algorithms
+benchmark_filter: "*/SHA256/*"    # Test only SHA256
+benchmark_filter: "OpenSSL/*"     # Test only OpenSSL
+benchmark_filter: ""              # Test everything (default)
+```
+
+### **Automated Results**
+- **GitHub Releases**: Results automatically published with timestamps
+- **GitHub Pages**: Interactive dashboard auto-deploys
+- **Artifact Storage**: 30-90 days retention for detailed analysis
+
 ## 📊 Benchmarking with Google Benchmark
 
 This project uses [Google Benchmark](https://github.com/google/benchmark) for precise performance measurements.
@@ -213,17 +308,25 @@ crypto-bench/
 ├── src/
 │   ├── main.cpp               # Benchmark main entry point
 │   ├── benchmarks/
-│   │   ├── hash/              # Hash function benchmarks
-│   │   ├── symmetric/         # Symmetric encryption benchmarks
-│   │   ├── asymmetric/        # Asymmetric crypto benchmarks
-│   │   ├── kex/               # Key exchange benchmarks
-│   │   └── mac/               # MAC benchmarks
+│   │   ├── hash_benchmarks.cpp       # Hash function benchmarks
+│   │   ├── symmetric_benchmarks.cpp  # Symmetric encryption benchmarks
+│   │   ├── asymmetric_benchmarks.cpp # Asymmetric crypto benchmarks
+│   │   ├── kex_benchmarks.cpp        # Key exchange benchmarks
+│   │   └── mac_benchmarks.cpp        # MAC benchmarks
 │   └── adapters/              # Library-specific adapters
-│       ├── cryptopp_adapter.h
-│       ├── openssl_adapter.h
-│       ├── botan_adapter.h
-│       ├── sodium_adapter.h
-│       └── mbedtls_adapter.h
+│       ├── cryptopp_adapter.h/.cpp   # Crypto++ implementations
+│       ├── openssl_adapter.h/.cpp    # OpenSSL implementations
+│       ├── botan_adapter.h/.cpp      # Botan implementations
+│       ├── libsodium_adapter.h/.cpp  # libsodium implementations
+│       └── mbedtls_adapter.h/.cpp    # mbedTLS implementations
+├── docs/                       # GitHub Pages dashboard
+│   ├── index.html             # Interactive performance dashboard
+│   ├── dashboard.js           # Dashboard visualization logic
+│   ├── _config.yml            # GitHub Pages configuration
+│   └── results/               # Auto-generated benchmark results
+├── .github/workflows/          # CI/CD automation
+│   ├── benchmark.yml          # Multi-compiler performance testing
+│   └── deploy-pages.yml       # Dashboard deployment
 └── scripts/
     ├── run_benchmarks.py      # Automated benchmark runner
     └── analyze_results.py     # Result analysis and visualization

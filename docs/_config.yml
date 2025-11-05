@@ -1,0 +1,27 @@
+# GitHub Pages configuration for Crypto-Bench Dashboard
+title: "Crypto-Bench Performance Dashboard"
+description: "Comprehensive C++ Cryptographic Library Benchmarking Results"
+baseurl: ""
+url: ""
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+theme: minima
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+
+# Include/exclude files
+include:
+  - "*.html"
+  - "*.js"
+  - "*.css"
+  - "*.json"
+
+exclude:
+  - "Gemfile"
+  - "Gemfile.lock"
+  - "README.md"

@@ -4,6 +4,7 @@
 # encryption, decryption, signatures, password hashing and more
 
 include(FetchContent)
+include(ExternalProject)
 
 message(STATUS "Fetching libsodium 1.0.20...")
 
@@ -16,30 +17,48 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-# Configure libsodium build options
-set(SODIUM_DISABLE_TESTS ON CACHE BOOL "")
-set(SODIUM_MINIMAL ON CACHE BOOL "")  # Minimal build for benchmarking
-set(SODIUM_STATIC ON CACHE BOOL "")   # Static library only
+# Use the deprecated FetchContent_Populate for now since we need manual build
+FetchContent_Populate(libsodium_src)
 
-# Make libsodium available
-FetchContent_MakeAvailable(libsodium_src)
+# Set up paths
+set(LIBSODIUM_SOURCE_DIR ${libsodium_src_SOURCE_DIR})
+set(LIBSODIUM_BINARY_DIR ${libsodium_src_BINARY_DIR})
+set(LIBSODIUM_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/libsodium_install)
 
-# The libsodium CMake creates the target: sodium
-if(TARGET sodium)
-    message(STATUS "libsodium 1.0.20 configured successfully")
+# Build libsodium using ExternalProject
+ExternalProject_Add(
+    libsodium_build
+    SOURCE_DIR ${LIBSODIUM_SOURCE_DIR}
+    BINARY_DIR ${LIBSODIUM_BINARY_DIR}
+    INSTALL_DIR ${LIBSODIUM_INSTALL_DIR}
+    CONFIGURE_COMMAND ${LIBSODIUM_SOURCE_DIR}/configure
+        --prefix=${LIBSODIUM_INSTALL_DIR}
+        --enable-static
+        --disable-shared
+        --disable-pie
+        --disable-ssp
+        --with-pic
+        CC=${CMAKE_C_COMPILER}
+        CFLAGS=${CMAKE_C_FLAGS_RELEASE}
+    BUILD_COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+    INSTALL_COMMAND make install
+    BUILD_BYPRODUCTS
+        ${LIBSODIUM_INSTALL_DIR}/lib/libsodium.a
+        ${LIBSODIUM_INSTALL_DIR}/include/sodium.h
+)
 
-    # Apply our optimization flags to libsodium target
-    target_compile_options(sodium PRIVATE ${CRYPTO_BENCH_C_FLAGS})
+# Create imported target for libsodium
+add_library(sodium STATIC IMPORTED GLOBAL)
+add_dependencies(sodium libsodium_build)
 
-    # Create alias target for easier access
-    add_library(libsodium::sodium ALIAS sodium)
-    
-    # Set properties for better integration
-    set_target_properties(sodium PROPERTIES
-        POSITION_INDEPENDENT_CODE ON
-    )
-else()
-    message(FATAL_ERROR "Failed to configure libsodium - sodium target not found")
-endif()
+# Set properties for the imported target
+set_target_properties(sodium PROPERTIES
+    IMPORTED_LOCATION ${LIBSODIUM_INSTALL_DIR}/lib/libsodium.a
+    INTERFACE_INCLUDE_DIRECTORIES ${LIBSODIUM_INSTALL_DIR}/include
+    POSITION_INDEPENDENT_CODE ON
+)
+
+# Create alias target for consistent naming
+add_library(libsodium::sodium ALIAS sodium)
 
 message(STATUS "libsodium 1.0.20 configured successfully")
