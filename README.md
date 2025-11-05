@@ -70,8 +70,8 @@ This ensures:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/crypto-bench.git
-cd crypto-bench
+git clone https://github.com/scc-tw/cryptobench-cpp.git
+cd cryptobench-cpp
 
 # Create build directory
 mkdir build && cd build
