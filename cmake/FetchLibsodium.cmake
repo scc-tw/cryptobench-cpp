@@ -47,18 +47,27 @@ ExternalProject_Add(
         ${LIBSODIUM_INSTALL_DIR}/include/sodium.h
 )
 
-# Create imported target for libsodium
-add_library(sodium STATIC IMPORTED GLOBAL)
-add_dependencies(sodium libsodium_build)
+# Create a function to set up libsodium imported target
+function(setup_libsodium_targets)
+    # Ensure the install directory exists
+    file(MAKE_DIRECTORY "${LIBSODIUM_INSTALL_DIR}/include")
+    
+    # Create imported target for libsodium
+    add_library(sodium STATIC IMPORTED GLOBAL)
+    add_dependencies(sodium libsodium_build)
 
-# Set properties for the imported target
-set_target_properties(sodium PROPERTIES
-    IMPORTED_LOCATION ${LIBSODIUM_INSTALL_DIR}/lib/libsodium.a
-    INTERFACE_INCLUDE_DIRECTORIES ${LIBSODIUM_INSTALL_DIR}/include
-    POSITION_INDEPENDENT_CODE ON
-)
+    # Set properties for the imported target
+    set_target_properties(sodium PROPERTIES
+        IMPORTED_LOCATION ${LIBSODIUM_INSTALL_DIR}/lib/libsodium.a
+        INTERFACE_INCLUDE_DIRECTORIES ${LIBSODIUM_INSTALL_DIR}/include
+        POSITION_INDEPENDENT_CODE ON
+    )
 
-# Create alias target for consistent naming
-add_library(libsodium::sodium ALIAS sodium)
+    # Create alias target for consistent naming
+    add_library(libsodium::sodium ALIAS sodium)
+endfunction()
+
+# Set up the targets immediately
+setup_libsodium_targets()
 
 message(STATUS "libsodium 1.0.20 configured successfully")

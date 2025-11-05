@@ -54,9 +54,19 @@ jobs:
       with:
         path: |
           build/_deps
-        key: deps-gcc15-${{ hashFiles('cmake/Fetch*.cmake') }}
+          ~/.cache/ccache
+        key: deps-gcc15-${{ hashFiles('cmake/Fetch*.cmake', 'CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h') }}-${{ hashFiles('.github/workflows/benchmark.yml') }}
         restore-keys: |
+          deps-gcc15-${{ hashFiles('cmake/Fetch*.cmake') }}-
           deps-gcc15-
+
+    - name: Setup ccache
+      run: |
+        apt-get install -y ccache
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
+        ccache --max-size=2G
+        ccache --set-config=compression=true
+        ccache --zero-stats
 
     - name: Configure CMake (No PGO)
       if: matrix.pgo == false
@@ -68,6 +78,8 @@ jobs:
           -DENABLE_PGO=OFF \
           -DCMAKE_C_COMPILER=gcc \
           -DCMAKE_CXX_COMPILER=g++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Configure CMake (PGO Generate)
@@ -81,6 +93,8 @@ jobs:
           -DPGO_PHASE=GENERATE \
           -DCMAKE_C_COMPILER=gcc \
           -DCMAKE_CXX_COMPILER=g++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Build (Generate Phase)
@@ -105,6 +119,8 @@ jobs:
           -DPGO_PHASE=USE \
           -DCMAKE_C_COMPILER=gcc \
           -DCMAKE_CXX_COMPILER=g++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Build (Final)
@@ -138,7 +154,7 @@ jobs:
         from datetime import datetime
 
         # Load benchmark results
-        with open('gcc15_pgo_results.json', 'r') as f:
+        with open('gcc15_${{ matrix.pgo && 'pgo' || 'nopgo' }}_results.json', 'r') as f:
             data = json.load(f)
 
         # Create structured output
@@ -147,7 +163,7 @@ jobs:
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "compiler": "gcc-15",
                 "platform": "ubuntu-latest",
-                "pgo_enabled": True,
+                "pgo_enabled": ${{ matrix.pgo && 'True' || 'False' }},
                 "lto_enabled": True,
                 "native_optimizations": True,
                 "commit_sha": os.environ.get('GITHUB_SHA', ''),
@@ -181,6 +197,13 @@ jobs:
         with open('gcc15_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
             json.dump(result, f, indent=2)
         EOF
+
+    - name: Show cache statistics
+      run: |
+        echo "=== Build Cache Statistics ==="
+        ccache --show-stats || echo "ccache not available"
+        echo "=== Dependency Cache Info ==="
+        du -sh build/_deps/* 2>/dev/null || echo "No dependencies cached yet"
 
     - name: Upload Results
       uses: actions/upload-artifact@v5
@@ -239,9 +262,19 @@ jobs:
       with:
         path: |
           build/_deps
-        key: deps-clang22-${{ hashFiles('cmake/Fetch*.cmake') }}
+          ~/.cache/ccache
+        key: deps-clang22-${{ hashFiles('cmake/Fetch*.cmake', 'CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h') }}-${{ hashFiles('.github/workflows/benchmark.yml') }}
         restore-keys: |
+          deps-clang22-${{ hashFiles('cmake/Fetch*.cmake') }}-
           deps-clang22-
+
+    - name: Setup ccache
+      run: |
+        apt-get install -y ccache
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
+        ccache --max-size=2G
+        ccache --set-config=compression=true
+        ccache --zero-stats
 
     - name: Configure CMake (No PGO)
       if: matrix.pgo == false
@@ -261,6 +294,8 @@ jobs:
           -DENABLE_PGO=OFF \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Configure CMake (PGO Generate)
@@ -282,6 +317,8 @@ jobs:
           -DPGO_PHASE=GENERATE \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Build (Generate Phase)
@@ -325,6 +362,8 @@ jobs:
           -DPGO_PHASE=USE \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -GNinja
 
     - name: Build (Final)
@@ -366,7 +405,7 @@ jobs:
             "metadata": {
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "compiler": "clang-22",
-                "platform": "ubuntu-24.04",
+                "platform": "ubuntu-latest",
                 "pgo_enabled": ${{ matrix.pgo && 'True' || 'False' }},
                 "lto_enabled": True,
                 "native_optimizations": True,
@@ -401,6 +440,13 @@ jobs:
         with open('clang22_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
             json.dump(result, f, indent=2)
         EOF
+
+    - name: Show cache statistics
+      run: |
+        echo "=== Build Cache Statistics ==="
+        ccache --show-stats || echo "ccache not available"
+        echo "=== Dependency Cache Info ==="
+        du -sh build/_deps/* 2>/dev/null || echo "No dependencies cached yet"
 
     - name: Upload Results
       uses: actions/upload-artifact@v5
@@ -449,9 +495,23 @@ jobs:
       with:
         path: |
           build/_deps
-        key: deps-msvc2022-${{ hashFiles('cmake/Fetch*.cmake') }}
+          ~\AppData\Local\Mozilla\sccache
+        key: deps-msvc2022-${{ hashFiles('cmake/Fetch*.cmake', 'CMakeLists.txt', 'src/**/*.cpp', 'src/**/*.h') }}-${{ hashFiles('.github/workflows/benchmark.yml') }}
         restore-keys: |
+          deps-msvc2022-${{ hashFiles('cmake/Fetch*.cmake') }}-
           deps-msvc2022-
+
+    - name: Setup sccache (Windows equivalent of ccache)
+      run: |
+        # Install sccache for Windows builds
+        choco install sccache -y
+        # Configure sccache
+        sccache --set-config=cache.disk.dir="$env:USERPROFILE\AppData\Local\Mozilla\sccache"
+        sccache --set-config=cache.disk.size="2G"
+        sccache --zero-stats
+        # Set environment variables for CMake to use sccache
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $env:GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $env:GITHUB_ENV
 
     - name: Configure CMake (No PGO)
       if: matrix.pgo == false
@@ -461,6 +521,8 @@ jobs:
         cmake .. `
           ${{ env.CMAKE_COMMON_FLAGS }} `
           -DENABLE_PGO=OFF `
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
           -G "Visual Studio 17 2022" `
           -A x64
 
@@ -473,6 +535,8 @@ jobs:
           ${{ env.CMAKE_COMMON_FLAGS }} `
           -DENABLE_PGO=ON `
           -DPGO_PHASE=GENERATE `
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
           -G "Visual Studio 17 2022" `
           -A x64
 
@@ -500,6 +564,8 @@ jobs:
           ${{ env.CMAKE_COMMON_FLAGS }} `
           -DENABLE_PGO=ON `
           -DPGO_PHASE=USE `
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
           -G "Visual Studio 17 2022" `
           -A x64
 
@@ -577,6 +643,16 @@ jobs:
         with open('msvc2022_${{ matrix.pgo && 'pgo' || 'nopgo' }}_processed.json', 'w') as f:
             json.dump(result, f, indent=2)
         EOF
+
+    - name: Show cache statistics
+      run: |
+        echo "=== Build Cache Statistics ==="
+        sccache --show-stats || echo "sccache not available"
+        echo "=== Dependency Cache Info ==="
+        Get-ChildItem build\_deps -ErrorAction SilentlyContinue | ForEach-Object { 
+          $size = (Get-ChildItem $_.FullName -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "$($_.Name): $([math]::Round($size, 2)) MB"
+        }
 
     - name: Upload Results
       uses: actions/upload-artifact@v5
@@ -806,7 +882,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Create release
-        gh release create ${{ env.RELEASE_TAG }} \
+        gh release create "$RELEASE_TAG" \
           --title "Performance Results $(date -u +%Y-%m-%d)" \
           --notes-file release_notes.md \
           performance_summary.json \

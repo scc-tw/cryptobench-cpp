@@ -32,6 +32,26 @@ if(APPLE)
     else()
         set(OPENSSL_TARGET "darwin64-x86_64-cc")
     endif()
+elseif(WIN32)
+    # Windows platform configuration for OpenSSL
+    if(MSVC)
+        # Visual Studio compiler
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(OPENSSL_TARGET "VC-WIN64A")  # 64-bit Windows
+        else()
+            set(OPENSSL_TARGET "VC-WIN32")   # 32-bit Windows
+        endif()
+    elseif(MINGW)
+        # MinGW compiler
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(OPENSSL_TARGET "mingw64")    # 64-bit MinGW
+        else()
+            set(OPENSSL_TARGET "mingw")      # 32-bit MinGW
+        endif()
+    else()
+        # Default to Visual Studio 64-bit
+        set(OPENSSL_TARGET "VC-WIN64A")
+    endif()
 elseif(UNIX)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
         set(OPENSSL_TARGET "linux-x86_64")
@@ -131,47 +151,65 @@ ExternalProject_Add(
         ${OPENSSL_CONFIG_OPTIONS}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
-        make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+        $<IF:$<BOOL:${WIN32}>,nmake,make -j${CMAKE_BUILD_PARALLEL_LEVEL}>
     INSTALL_COMMAND
-        make install_sw  # install_sw = install software only (no docs)
+        $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
     STEP_TARGETS configure build install
 )
 
-# Create imported targets for OpenSSL libraries
-# OpenSSL 3.x creates libssl.a and libcrypto.a
-add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
-add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
+# Create a function to set up OpenSSL imported targets after the build
+function(setup_openssl_targets)
+    # Ensure the install directory exists
+    file(MAKE_DIRECTORY "${OPENSSL_INSTALL_DIR}/include")
+    
+    # Create imported targets for OpenSSL libraries
+    # OpenSSL 3.x creates libssl.a and libcrypto.a
+    add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
+    add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
 
-# Set library locations
-set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
-set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+    # Set library locations based on platform
+    if(WIN32)
+        set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.lib)
+        set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.lib)
+    else()
+        set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
+        set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+    endif()
 
-set_target_properties(OpenSSL::Crypto PROPERTIES
-    IMPORTED_LOCATION ${OPENSSL_CRYPTO_LIBRARY}
-    INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
-)
+    set_target_properties(OpenSSL::Crypto PROPERTIES
+        IMPORTED_LOCATION ${OPENSSL_CRYPTO_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+    )
 
-set_target_properties(OpenSSL::SSL PROPERTIES
-    IMPORTED_LOCATION ${OPENSSL_SSL_LIBRARY}
-    INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
-    INTERFACE_LINK_LIBRARIES OpenSSL::Crypto
-)
+    set_target_properties(OpenSSL::SSL PROPERTIES
+        IMPORTED_LOCATION ${OPENSSL_SSL_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+        INTERFACE_LINK_LIBRARIES OpenSSL::Crypto
+    )
 
-# Make sure the libraries are built before they're used
-add_dependencies(OpenSSL::Crypto openssl_external)
-add_dependencies(OpenSSL::SSL openssl_external)
+    # Make sure the libraries are built before they're used
+    add_dependencies(OpenSSL::Crypto openssl_external)
+    add_dependencies(OpenSSL::SSL openssl_external)
+endfunction()
+
+# Set up the targets immediately
+setup_openssl_targets()
 
 # On some platforms, OpenSSL may need additional system libraries
-if(UNIX AND NOT APPLE)
+if(WIN32)
+    # Windows needs ws2_32, crypt32, and advapi32
+    set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES ws2_32 crypt32 advapi32)
+elseif(UNIX AND NOT APPLE)
     # Linux may need libdl and libpthread
     find_library(DL_LIBRARY dl)
     if(DL_LIBRARY)
         set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES ${DL_LIBRARY})
     endif()
-    
+
     find_library(PTHREAD_LIBRARY pthread)
     if(PTHREAD_LIBRARY)
         set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
