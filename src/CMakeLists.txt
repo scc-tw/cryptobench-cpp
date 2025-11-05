@@ -57,8 +57,8 @@ add_executable(crypto-bench ${CRYPTO_BENCH_SOURCES} ${CRYPTO_BENCH_HEADERS})
 # Using C++20 for modern features and better performance
 target_compile_features(crypto-bench PRIVATE cxx_std_20)
 
-# Apply optimization flags
-target_compile_options(crypto-bench PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+# Apply optimization flags and per-target IPO
+apply_crypto_bench_flags(crypto-bench)
 
 # Include directories
 target_include_directories(crypto-bench PRIVATE

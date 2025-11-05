@@ -154,6 +154,8 @@ ExternalProject_Add(
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
     BUILD_BYPRODUCTS
+        ${OPENSSL_BUILD_DIR}/libcrypto.a
+        ${OPENSSL_BUILD_DIR}/libssl.a
         ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a
         ${OPENSSL_INSTALL_DIR}/lib/libssl.a
         ${OPENSSL_INSTALL_DIR}/lib/libcrypto.lib
@@ -167,27 +169,28 @@ function(setup_openssl_targets)
     file(MAKE_DIRECTORY "${OPENSSL_INSTALL_DIR}/include")
     
     # Create imported targets for OpenSSL libraries
-    # OpenSSL 3.x creates libssl.a and libcrypto.a
+    # Prefer linking against build tree outputs to avoid lib vs lib64 install differences
     add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
     add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
 
-    # Set library locations based on platform
     if(WIN32)
         set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.lib)
         set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.lib)
+        set(OPENSSL_INCLUDE_DIR "${OPENSSL_INSTALL_DIR}/include")
     else()
-        set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
-        set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+        set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_BUILD_DIR}/libcrypto.a)
+        set(OPENSSL_SSL_LIBRARY ${OPENSSL_BUILD_DIR}/libssl.a)
+        set(OPENSSL_INCLUDE_DIR "${OPENSSL_BUILD_DIR}/include")
     endif()
 
     set_target_properties(OpenSSL::Crypto PROPERTIES
         IMPORTED_LOCATION ${OPENSSL_CRYPTO_LIBRARY}
-        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}"
     )
 
     set_target_properties(OpenSSL::SSL PROPERTIES
         IMPORTED_LOCATION ${OPENSSL_SSL_LIBRARY}
-        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}"
         INTERFACE_LINK_LIBRARIES OpenSSL::Crypto
     )
 

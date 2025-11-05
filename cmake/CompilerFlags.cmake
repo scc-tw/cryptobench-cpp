@@ -82,12 +82,9 @@ if(ENABLE_LTO)
         list(APPEND CRYPTO_BENCH_CXX_FLAGS -flto)
         list(APPEND CRYPTO_BENCH_C_FLAGS -flto)
 
-        # Also set for linker
+        # Also set for executable and shared linker
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
         set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -flto")
-
-        # Enable interprocedural optimization
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
         message(STATUS "Link-Time Optimization enabled (GCC)")
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list(APPEND CRYPTO_BENCH_CXX_FLAGS -flto)
@@ -101,8 +98,7 @@ if(ENABLE_LTO)
             set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -flto")
         endif()
 
-        # Enable interprocedural optimization
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+        # Interprocedural optimization will be set per-target
 
         # On macOS with Clang, we need to use llvm-ar for LTO archives
         if(APPLE)
@@ -174,6 +170,11 @@ string(REPLACE ";" " " CRYPTO_BENCH_C_FLAGS_STR "${CRYPTO_BENCH_C_FLAGS}")
 # Function to apply flags to a target
 function(apply_crypto_bench_flags target)
     target_compile_options(${target} PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+
+    # Enable IPO on this target when LTO is enabled
+    if(ENABLE_LTO)
+        set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
 
     # Set C flags for targets that use C
     get_target_property(target_type ${target} TYPE)
