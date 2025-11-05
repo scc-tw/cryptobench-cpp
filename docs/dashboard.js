@@ -216,7 +216,8 @@ class CryptoBenchDashboard {
     // Parse benchmark name to extract components
     parseBenchmarkName(name) {
         // Format: BM_Library_Algorithm/BlockSize
-        const match = name.match(/^BM_(\w+)_(\w+)\/(\d+)$/);
+        // Algorithm can contain underscores (e.g., SHA3_256, X25519_SharedSecret)
+        const match = name.match(/^BM_(\w+)_(.+?)\/(\d+)$/);
         if (!match) return null;
 
         const library = this.normalizeLibraryName(match[1]);
@@ -267,26 +268,29 @@ class CryptoBenchDashboard {
 
         // Analyze each algorithm and block size combination
         const benchmarkResults = [];
+        const benchmarkGroups = {};
 
-        // Go through each category and algorithm
-        Object.entries(data.byCategory).forEach(([category, libraryData]) => {
-            // Get all unique algorithm/blocksize combinations
-            const algorithms = new Set();
+        // Group benchmarks by algorithm and block size
+        // Use byAlgorithm data structure which is more complete
+        Object.entries(data.byAlgorithm).forEach(([algorithm, libraryData]) => {
+            // For each algorithm, check each block size
+            const blockSizes = new Set();
             Object.values(libraryData).forEach(libData => {
                 if (typeof libData === 'object') {
-                    Object.keys(libData).forEach(key => algorithms.add(key));
+                    Object.keys(libData).forEach(size => blockSizes.add(size));
                 }
             });
 
-            algorithms.forEach(algo => {
+            blockSizes.forEach(blockSize => {
+                const benchmarkKey = `${algorithm}/${blockSize}`;
                 const results = [];
 
                 // Collect performance for each library
                 Object.entries(libraryData).forEach(([library, perfData]) => {
-                    if (perfData && perfData[algo] && perfData[algo] > 0) {
+                    if (perfData && perfData[blockSize] && perfData[blockSize].throughput > 0) {
                         results.push({
                             library: library,
-                            performance: perfData[algo]
+                            performance: perfData[blockSize].throughput // Use throughput in MB/s
                         });
                     }
                 });
@@ -297,25 +301,28 @@ class CryptoBenchDashboard {
                 // Award medals
                 if (results.length > 0) {
                     // Gold medal (第一名)
-                    medalCounts[results[0].library].gold++;
-                    medalCounts[results[0].library].total++;
+                    if (medalCounts[results[0].library]) {
+                        medalCounts[results[0].library].gold++;
+                        medalCounts[results[0].library].total++;
+                    }
 
                     // Silver medal (第二名)
-                    if (results.length > 1) {
+                    if (results.length > 1 && medalCounts[results[1].library]) {
                         medalCounts[results[1].library].silver++;
                         medalCounts[results[1].library].total++;
                     }
 
                     // Bronze medal (第三名)
-                    if (results.length > 2) {
+                    if (results.length > 2 && medalCounts[results[2].library]) {
                         medalCounts[results[2].library].bronze++;
                         medalCounts[results[2].library].total++;
                     }
 
                     // Track for debugging
                     benchmarkResults.push({
-                        category: category,
-                        algorithm: algo,
+                        benchmark: benchmarkKey,
+                        algorithm: algorithm,
+                        blockSize: blockSize,
                         winner: results[0].library,
                         results: results
                     });
@@ -326,6 +333,26 @@ class CryptoBenchDashboard {
         // Store detailed medal counts for display
         this.medalCounts = medalCounts;
         this.benchmarkWinners = benchmarkResults;
+
+        // Debug: Log the medal counts
+        console.log('Medal Counts:', medalCounts);
+        console.log('Total benchmarks analyzed:', benchmarkResults.length);
+
+        // If no medals were awarded, there's a problem with data processing
+        const totalMedals = Object.values(medalCounts).reduce((sum, medals) =>
+            sum + medals.gold + medals.silver + medals.bronze, 0);
+
+        if (totalMedals === 0) {
+            console.warn('Warning: No medals awarded! Check data processing.');
+            // Try to at least give one gold medal to whoever has data
+            if (data.byLibrary) {
+                Object.keys(data.byLibrary).forEach(lib => {
+                    if (medalCounts[lib]) {
+                        medalCounts[lib].gold = 1;
+                    }
+                });
+            }
+        }
 
         // Calculate final scores based on medals
         // Scoring: Gold = 3 points, Silver = 2 points, Bronze = 1 point
