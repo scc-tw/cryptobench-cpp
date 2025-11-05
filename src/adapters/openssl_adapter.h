@@ -9,6 +9,9 @@
 
 #ifdef ENABLE_OPENSSL
 
+// Forward declare OpenSSL types
+typedef struct evp_pkey_st EVP_PKEY;
+
 namespace crypto_bench {
 namespace openssl {
 
@@ -163,7 +166,7 @@ public:
 // Asymmetric signature adapters
 class OpenSSLRSA2048 : public AsymmetricSignAdapter {
 private:
-    struct EVP_PKEY* keypair_;
+    EVP_PKEY* keypair_;
 
 public:
     OpenSSLRSA2048();
@@ -186,7 +189,7 @@ public:
 
 class OpenSSLRSA4096 : public AsymmetricSignAdapter {
 private:
-    struct EVP_PKEY* keypair_;
+    EVP_PKEY* keypair_;
 
 public:
     OpenSSLRSA4096();
@@ -209,7 +212,7 @@ public:
 
 class OpenSSLECDSAP256 : public AsymmetricSignAdapter {
 private:
-    struct EVP_PKEY* keypair_;
+    EVP_PKEY* keypair_;
 
 public:
     OpenSSLECDSAP256();
@@ -232,7 +235,7 @@ public:
 
 class OpenSSLEd25519 : public AsymmetricSignAdapter {
 private:
-    struct EVP_PKEY* keypair_;
+    EVP_PKEY* keypair_;
 
 public:
     OpenSSLEd25519();

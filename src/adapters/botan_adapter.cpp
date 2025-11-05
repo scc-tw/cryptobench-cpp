@@ -18,7 +18,7 @@
 #include <botan/ecdh.h>
 #include <botan/curve25519.h>
 #include <botan/ec_group.h>
-#include <botan/auto_rng.h>
+#include <botan/rng.h>
 #include <botan/system_rng.h>
 #include <botan/pk_keys.h>
 #include <botan/pkcs8.h>

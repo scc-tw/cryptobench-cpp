@@ -6,11 +6,11 @@
 #define CRYPTO_BENCH_CRYPTOPP_ADAPTER_H
 
 #include "common/crypto_adapter.h"
+#include <xed25519.h>
 
 #ifdef ENABLE_CRYPTOPP
 
-// Forward declarations would go here but cause conflicts with Crypto++ internals
-// For now, we'll conditionally compile the advanced features
+// Use opaque pointers to avoid forward declaration conflicts with CryptoPP
 
 namespace crypto_bench {
 namespace cryptopp {

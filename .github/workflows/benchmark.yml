@@ -41,8 +41,9 @@ jobs:
       run: |
         apt-get update
         apt-get install -y \
-          perl python3 \
+          perl python3 python3-pip \
           libtool autoconf automake
+        pip3 install jsonschema jinja2
 
     - name: Verify GCC 15
       run: |
@@ -233,10 +234,11 @@ jobs:
       run: |
         apt-get update
         apt-get install -y \
-          perl python3 \
+          perl python3 python3-pip \
           libtool autoconf automake \
           llvm-22 llvm-22-tools \
           || echo "Some LLVM tools may not be available"
+        pip3 install jsonschema jinja2
         
         # Create symlinks for LLVM tools if they exist with version suffix
         if [ -f /usr/bin/llvm-ar-22 ]; then
@@ -487,8 +489,9 @@ jobs:
         choco install strawberryperl -y
         # Add Perl to PATH
         echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        # Install Python (should already be available)
+        # Install Python dependencies
         python --version
+        pip install jsonschema jinja2
 
     - name: Cache dependencies
       uses: actions/cache@v4
