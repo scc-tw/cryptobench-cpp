@@ -79,13 +79,14 @@ endif()
 # Link-Time Optimization (when ENABLE_LTO=ON)
 if(ENABLE_LTO)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        list(APPEND CRYPTO_BENCH_CXX_FLAGS -flto)
-        list(APPEND CRYPTO_BENCH_C_FLAGS -flto)
+        # Reduce LTO memory footprint on GCC
+        list(APPEND CRYPTO_BENCH_CXX_FLAGS -flto=auto -fno-fat-lto-objects)
+        list(APPEND CRYPTO_BENCH_C_FLAGS -flto=auto -fno-fat-lto-objects)
 
-        # Also set for executable and shared linker
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
-        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -flto")
-        message(STATUS "Link-Time Optimization enabled (GCC)")
+        # Also set for executable and shared linker; hint linker to free memory
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=auto -Wl,--no-keep-memory")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -flto=auto -Wl,--no-keep-memory")
+        message(STATUS "Link-Time Optimization enabled (GCC, tuned)")
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list(APPEND CRYPTO_BENCH_CXX_FLAGS -flto)
         list(APPEND CRYPTO_BENCH_C_FLAGS -flto)

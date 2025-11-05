@@ -43,6 +43,11 @@ if(WIN32)
     )
 else()
     # Build libsodium using Autotools on Unix-like systems
+    # Limit parallelism on CI to reduce memory/CPU spikes
+    set(LIBSODIUM_JOBS ${CMAKE_BUILD_PARALLEL_LEVEL})
+    if(DEFINED ENV{CI})
+        set(LIBSODIUM_JOBS 2)
+    endif()
     ExternalProject_Add(
         libsodium_build
         SOURCE_DIR ${LIBSODIUM_SOURCE_DIR}
@@ -57,7 +62,7 @@ else()
             --with-pic
             CC=${CMAKE_C_COMPILER}
             CFLAGS=${CMAKE_C_FLAGS_RELEASE}
-        BUILD_COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+        BUILD_COMMAND make -j${LIBSODIUM_JOBS}
         INSTALL_COMMAND make install
         BUILD_BYPRODUCTS
             ${LIBSODIUM_INSTALL_DIR}/lib/libsodium.a

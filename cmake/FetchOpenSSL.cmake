@@ -22,6 +22,12 @@ set(OPENSSL_SOURCE_DIR ${openssl_src_SOURCE_DIR})
 set(OPENSSL_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl-build)
 set(OPENSSL_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl-install)
 
+# Limit build parallelism on CI to reduce memory use
+set(OPENSSL_JOBS ${CMAKE_BUILD_PARALLEL_LEVEL})
+if(DEFINED ENV{CI})
+    set(OPENSSL_JOBS 2)
+endif()
+
 # Determine the target platform for OpenSSL's Configure script
 if(APPLE)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
@@ -153,7 +159,7 @@ ExternalProject_Add(
         ${OPENSSL_CONFIG_OPTIONS}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
-        $<IF:$<BOOL:${WIN32}>,nmake,make -j${CMAKE_BUILD_PARALLEL_LEVEL}>
+        $<IF:$<BOOL:${WIN32}>,nmake,make -j${OPENSSL_JOBS}>
     INSTALL_COMMAND
         $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0

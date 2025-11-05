@@ -54,18 +54,25 @@ endif()
 # Find Python (required for Botan's build system)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+# Determine job count; cap on CI to reduce memory (avoid OOM on large amalgamation)
+set(BOTAN_JOBS ${CMAKE_BUILD_PARALLEL_LEVEL})
+if(DEFINED ENV{CI})
+    # Use a conservative default on CI runners
+    set(BOTAN_JOBS 2)
+endif()
+
 # Determine the build command based on the platform
 if(WIN32)
     if(MSVC)
-        # Visual Studio uses nmake
+        # Visual Studio uses nmake (nmake has no -j)
         set(BOTAN_BUILD_CMD nmake -f ${BOTAN_BUILD_DIR}/Makefile libs)
     else()
         # MinGW uses mingw32-make
-        set(BOTAN_BUILD_CMD mingw32-make -C ${BOTAN_BUILD_DIR} libs -j${CMAKE_BUILD_PARALLEL_LEVEL})
+        set(BOTAN_BUILD_CMD mingw32-make -C ${BOTAN_BUILD_DIR} libs -j${BOTAN_JOBS})
     endif()
 else()
     # Unix/Linux/macOS use regular make
-    set(BOTAN_BUILD_CMD make -C ${BOTAN_BUILD_DIR} libs -j${CMAKE_BUILD_PARALLEL_LEVEL})
+    set(BOTAN_BUILD_CMD make -C ${BOTAN_BUILD_DIR} libs -j${BOTAN_JOBS})
 endif()
 
 # Use ExternalProject_Add to build Botan
