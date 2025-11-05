@@ -17,8 +17,7 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-# Use the deprecated FetchContent_Populate for now since we need manual build
-FetchContent_Populate(libsodium_src)
+FetchContent_MakeAvailable(libsodium_src)
 
 # Set up paths
 set(LIBSODIUM_SOURCE_DIR ${libsodium_src_SOURCE_DIR})

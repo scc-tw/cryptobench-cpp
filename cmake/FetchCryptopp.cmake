@@ -16,14 +16,8 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-FetchContent_GetProperties(cryptopp_src)
-if(NOT cryptopp_src_POPULATED)
-    FetchContent_Populate(cryptopp_src)
-    # After population, the source is in cryptopp_src_SOURCE_DIR
-    set(CRYPTOPP_SOURCE_DIR ${cryptopp_src_SOURCE_DIR})
-else()
-    set(CRYPTOPP_SOURCE_DIR ${cryptopp_src_SOURCE_DIR})
-endif()
+FetchContent_MakeAvailable(cryptopp_src)
+set(CRYPTOPP_SOURCE_DIR ${cryptopp_src_SOURCE_DIR})
 
 # Build Crypto++ using its Makefile
 # For simplicity, let's use Crypto++'s default optimizations which are already good

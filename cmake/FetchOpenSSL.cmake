@@ -16,10 +16,7 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-FetchContent_GetProperties(openssl_src)
-if(NOT openssl_src_POPULATED)
-    FetchContent_Populate(openssl_src)
-endif()
+FetchContent_MakeAvailable(openssl_src)
 
 set(OPENSSL_SOURCE_DIR ${openssl_src_SOURCE_DIR})
 set(OPENSSL_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl-build)
@@ -151,7 +148,7 @@ ExternalProject_Add(
         ${OPENSSL_CONFIG_OPTIONS}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
-        $<IF:$<BOOL:${WIN32}>,nmake,make -j${CMAKE_BUILD_PARALLEL_LEVEL}>
+        $<IF:$<BOOL:${WIN32}>,nmake,make> -j
     INSTALL_COMMAND
         $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0

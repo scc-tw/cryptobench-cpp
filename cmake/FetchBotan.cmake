@@ -16,10 +16,7 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-FetchContent_GetProperties(botan_src)
-if(NOT botan_src_POPULATED)
-    FetchContent_Populate(botan_src)
-endif()
+FetchContent_MakeAvailable(botan_src)
 
 set(BOTAN_SOURCE_DIR ${botan_src_SOURCE_DIR})
 set(BOTAN_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/botan-build)
