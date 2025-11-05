@@ -40,46 +40,95 @@ jobs:
     - name: Copy results to docs
       if: github.event.workflow_run.conclusion == 'success'
       run: |
-        # Copy all JSON results to docs directory for web access
+        # Create results archive directory
         mkdir -p docs/results
+
+        # Find and copy the main benchmark results to docs root for dashboard
+        echo "Looking for benchmark result JSON files in artifacts..."
+
+        # Priority order: look for result.json first, then any *_results.json file
+        RESULT_FILE=""
+        if find ./benchmark-results -name "result.json" -type f | head -1 | xargs -I {} test -f {}; then
+          RESULT_FILE=$(find ./benchmark-results -name "result.json" -type f | head -1)
+          echo "Found result.json at: $RESULT_FILE"
+        elif find ./benchmark-results -name "*_results.json" -type f | head -1 | xargs -I {} test -f {}; then
+          # Use the most recent results file (typically the last one alphabetically)
+          RESULT_FILE=$(find ./benchmark-results -name "*_results.json" -type f | sort | tail -1)
+          echo "Found benchmark results at: $RESULT_FILE"
+        fi
+
+        if [ -n "$RESULT_FILE" ]; then
+          cp "$RESULT_FILE" docs/result.json
+          echo "✅ Copied $RESULT_FILE to docs/result.json for dashboard"
+
+          # Also archive it with timestamp
+          TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+          ORIGINAL_NAME=$(basename "$RESULT_FILE")
+          cp "$RESULT_FILE" "docs/results/${ORIGINAL_NAME%.json}_${TIMESTAMP}.json"
+          echo "✅ Archived to docs/results/${ORIGINAL_NAME%.json}_${TIMESTAMP}.json"
+        else
+          echo "⚠️ No benchmark result JSON files found in artifacts"
+        fi
+
+        # Copy all other JSON results to archive
         find ./benchmark-results -name "*.json" -exec cp {} docs/results/ \;
-        
+
         # Create an index of available results
-        ls docs/results/*.json > docs/results/index.txt
-        
-        # Generate results manifest
-        cat > docs/results/manifest.json << 'EOF'
+        ls docs/results/*.json > docs/results/index.txt 2>/dev/null || echo "No results yet" > docs/results/index.txt
+
+        # Generate enhanced results manifest
+        cat > docs/results/manifest.json << EOF
         {
           "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
           "workflow_run_id": "${{ github.event.workflow_run.id }}",
           "commit_sha": "${{ github.sha }}",
+          "latest_result": "result.json",
+          "latest_update": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
           "available_files": [
         EOF
-        
+
         # Add file list to manifest
         first=true
         for file in docs/results/*.json; do
-          if [ "$file" != "docs/results/manifest.json" ]; then
+          if [ -f "$file" ] && [ "$file" != "docs/results/manifest.json" ]; then
             if [ "$first" = true ]; then
               first=false
             else
               echo "," >> docs/results/manifest.json
             fi
             filename=$(basename "$file")
-            echo "    \"$filename\"" >> docs/results/manifest.json
+            filesize=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "0")
+            echo "    {\"name\": \"$filename\", \"size\": $filesize}" >> docs/results/manifest.json
           fi
         done
-        
-        cat >> docs/results/manifest.json << 'EOF'
+
+        cat >> docs/results/manifest.json << EOF
           ]
         }
         EOF
+
+        echo "📊 Dashboard will auto-load from: https://${{ github.repository_owner }}.github.io/crypto-bench/"
 
     - name: Create sample data (fallback)
       if: github.event.workflow_run.conclusion != 'success'
       run: |
         mkdir -p docs/results
-        cat > docs/results/sample_performance_summary.json << 'EOF'
+
+        # Check if there's an existing result.json to use
+        if [ ! -f "docs/result.json" ]; then
+          echo "⚠️ No benchmark data available, using existing result.json if available"
+
+          # Try to use existing result.json from the repository
+          if [ -f "result.json" ]; then
+            cp result.json docs/result.json
+            echo "✅ Using existing result.json from repository"
+          elif [ -f "build/result.json" ]; then
+            cp build/result.json docs/result.json
+            echo "✅ Using existing result.json from build directory"
+          else
+            # Create a minimal sample if nothing exists
+            echo "Creating minimal sample data..."
+            cat > docs/result.json << 'EOF'
         {
           "summary_metadata": {
             "generated_at": "2024-11-05T10:00:00Z",
@@ -121,6 +170,20 @@ jobs:
             "compiler_rankings": {},
             "pgo_impact": {}
           }
+        }
+        EOF
+          fi
+        fi
+
+        # Also create the manifest for consistency
+        cat > docs/results/manifest.json << 'EOF'
+        {
+          "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "workflow_run_id": "manual_trigger",
+          "commit_sha": "${{ github.sha }}",
+          "latest_result": "result.json",
+          "latest_update": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "available_files": ["result.json"]
         }
         EOF
 
