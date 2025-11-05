@@ -120,6 +120,58 @@ class CryptoBenchDashboard {
             return raw;
         }
 
+        // Google Benchmark raw JSON: { context: {...}, benchmarks: [...] }
+        if (raw && raw.context && Array.isArray(raw.benchmarks)) {
+            const toNs = (value, unit) => {
+                const scale = unit === 'ns' ? 1 : unit === 'us' ? 1e3 : unit === 'ms' ? 1e6 : unit === 's' ? 1e9 : 1;
+                return Math.round((value || 0) * scale);
+            };
+
+            // Prefer mean aggregates if present
+            const meanBenches = raw.benchmarks.filter(b => b.run_type === 'aggregate' && b.aggregate_name === 'mean');
+            const source = meanBenches.length > 0 ? meanBenches : raw.benchmarks;
+
+            const normalizedBenchmarks = source.map(b => {
+                const parsed = this.parseBenchmarkName(typeof b.name === 'string' ? b.name : (b.run_name || ''));
+                return {
+                    name: b.name || b.run_name || parsed.baseName,
+                    library: parsed.library,
+                    algorithm: parsed.algorithm,
+                    input_size: parsed.inputSize,
+                    time_ns: toNs(b.real_time ?? b.cpu_time ?? 0, b.time_unit || 'ns'),
+                    cpu_time_ns: toNs(b.cpu_time ?? 0, b.time_unit || 'ns'),
+                    iterations: b.iterations || 0,
+                    bytes_per_second: b.bytes_per_second || 0,
+                    items_per_second: b.items_per_second || 0,
+                    time_unit: b.time_unit || 'ns'
+                };
+            });
+
+            const cfg = {
+                compiler: 'unknown',
+                platform: (raw.context && raw.context.host_name) ? raw.context.host_name : 'unknown',
+                pgo_enabled: false,
+                benchmark_count: normalizedBenchmarks.length,
+                benchmarks: normalizedBenchmarks
+            };
+
+            return {
+                summary_metadata: {
+                    generated_at: raw.context && raw.context.date ? raw.context.date : new Date().toISOString(),
+                    total_configurations: 1,
+                    workflow_run_id: '',
+                    commit_sha: '',
+                    repository: ''
+                },
+                configurations: [cfg],
+                performance_comparison: {
+                    fastest_by_algorithm: {},
+                    compiler_rankings: {},
+                    pgo_impact: {}
+                }
+            };
+        }
+
         // If single processed results with benchmarks array
         if (raw && Array.isArray(raw.benchmarks)) {
             const meta = raw.metadata || {};
@@ -157,6 +209,83 @@ class CryptoBenchDashboard {
         }
 
         throw new Error('Unrecognized results format');
+    }
+
+    parseBenchmarkName(name) {
+        // Expected forms:
+        //  - "BM_<Lib>_<Algo>/<size>[_suffix]"
+        //  - "BM_<Lib>_<Algo>[_suffix]" (no size)
+        const result = { baseName: name || '', library: 'unknown', algorithm: 'unknown', inputSize: 'unknown' };
+        if (!name || typeof name !== 'string') return result;
+
+        // Strip aggregate suffixes from trailing name part for parsing convenience
+        const withoutSuffix = name.replace(/_(mean|median|stddev|cv)$/i, '');
+
+        const parts = withoutSuffix.split('/');
+        const head = parts[0] || '';
+        const sizePart = parts.length > 1 ? parts[1] : '';
+
+        // Extract library and algorithm tokens from head: BM_<Lib>_<Algo>
+        const m = head.match(/^BM_([^_]+)_(.+)$/);
+        if (!m) {
+            return result;
+        }
+        const libToken = m[1];
+        const algoToken = m[2];
+
+        result.library = this.mapLibraryToken(libToken);
+        result.algorithm = this.mapAlgorithmToken(algoToken);
+        result.inputSize = sizePart ? String(sizePart).replace(/_.*/, '') : 'unknown';
+        return result;
+    }
+
+    mapLibraryToken(token) {
+        const map = {
+            'Cryptopp': 'Crypto++',
+            'OpenSSL': 'OpenSSL',
+            'Botan': 'Botan',
+            'Libsodium': 'libsodium',
+            'MbedTLS': 'mbedTLS'
+        };
+        return map[token] || token || 'unknown';
+    }
+
+    mapAlgorithmToken(token) {
+        if (!token) return 'unknown';
+        // Common direct mappings
+        const direct = {
+            'SHA256': 'SHA-256',
+            'SHA512': 'SHA-512',
+            'SHA3_256': 'SHA3-256',
+            'BLAKE2b': 'BLAKE2b',
+            'ChaCha20Poly1305': 'ChaCha20-Poly1305',
+            'Ed25519': 'Ed25519',
+            'X25519': 'X25519',
+            'HMACSHA256': 'HMAC-SHA256',
+            'Poly1305': 'Poly1305'
+        };
+        if (direct[token]) return direct[token];
+
+        // AES variants like AES128GCM, AES256GCM, AES256CBC
+        const aes = token.match(/^AES(\d+)(GCM|CBC)$/i);
+        if (aes) {
+            return `AES-${aes[1]}-${aes[2].toUpperCase()}`;
+        }
+
+        // RSA variants like RSA2048, RSA4096
+        const rsa = token.match(/^RSA(\d{4})$/i);
+        if (rsa) {
+            return `RSA-${rsa[1]}`;
+        }
+
+        // ECDSA/ECDH P256: ECDSAP256, ECDHP256
+        const ecdsax = token.match(/^(ECDSA|ECDH)P(\d+)$/i);
+        if (ecdsax) {
+            return `${ecdsax[1].toUpperCase()}-P${ecdsax[2]}`;
+        }
+
+        // Default: return as-is
+        return token;
     }
 
     async loadBenchmarkData() {
