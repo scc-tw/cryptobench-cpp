@@ -56,6 +56,10 @@
                     <span class="tab-icon">🔍</span>
                     Detailed Analysis
                 </button>
+                <button class="nav-tab" data-tab="pgo">
+                    <span class="tab-icon">⚡</span>
+                    PGO Impact
+                </button>
             </div>
         </nav>
 
@@ -261,6 +265,122 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tableBody">
+                                    <!-- Dynamically populated -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- PGO Impact Tab -->
+                <div id="pgo-tab" class="tab-panel">
+                    <!-- PGO Data Availability Notice -->
+                    <section class="filter-section" id="pgoAvailability">
+                        <div class="filter-controls">
+                            <div class="filter-group" style="flex: 1;">
+                                <label>Available Compilers</label>
+                                <select id="pgoCompiler" class="filter-select">
+                                    <!-- Dynamically populated -->
+                                </select>
+                            </div>
+                            <div class="filter-group" style="flex: 1;">
+                                <label>View Mode</label>
+                                <select id="pgoViewMode" class="filter-select">
+                                    <option value="percentage">Percentage Improvement</option>
+                                    <option value="absolute">Absolute Values</option>
+                                    <option value="ratio">Speed Ratio</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" onclick="dashboard.updatePGOAnalysis()">
+                                Update Analysis
+                            </button>
+                        </div>
+                        <div id="pgoDataStatus" style="margin-top: 1rem; padding: 1rem; background: #f0f0f0; border-radius: 8px;">
+                            <!-- Status message populated dynamically -->
+                        </div>
+                    </section>
+
+                    <!-- Top PGO Performers -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">🏆 Most Impacted by PGO</h2>
+                        <div class="score-grid">
+                            <div class="score-card">
+                                <h3>Best Library for PGO</h3>
+                                <div class="winner-display">
+                                    <div class="library-name" id="pgoTopLibrary">-</div>
+                                    <div class="composite-score" id="pgoTopLibraryScore">-</div>
+                                    <div class="score-label">Average Improvement</div>
+                                </div>
+                            </div>
+                            <div class="score-card">
+                                <h3>Best Algorithm for PGO</h3>
+                                <div class="winner-display">
+                                    <div class="library-name" id="pgoTopAlgorithm">-</div>
+                                    <div class="composite-score" id="pgoTopAlgorithmScore">-</div>
+                                    <div class="score-label">Average Improvement</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Library-Level PGO Impact -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">📊 PGO Impact by Library (Average Across All Algorithms)</h2>
+                        <div class="chart-container large">
+                            <canvas id="pgoLibraryChart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- Algorithm-Level PGO Impact -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">⚡ PGO Impact by Algorithm (Average Across All Libraries)</h2>
+                        <div class="chart-container large">
+                            <canvas id="pgoAlgorithmChart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- Detailed Comparison: Library + Algorithm -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">🔥 Detailed: Library × Algorithm PGO Impact</h2>
+                        <div class="chart-container">
+                            <canvas id="pgoHeatmapChart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- PGO Statistics -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">📈 PGO Statistics Summary</h2>
+                        <div class="stats-grid" id="pgoStatsGrid">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </section>
+
+                    <!-- Detailed PGO Comparison Table -->
+                    <section class="dashboard-section">
+                        <h2 class="section-title">📋 Detailed PGO Comparison (Library + Algorithm + Block Size)</h2>
+                        <div class="table-controls">
+                            <input type="text" id="pgoTableSearch" placeholder="Search library or algorithm..." class="search-input">
+                            <select id="pgoTableSort" class="filter-select">
+                                <option value="improvement">Sort by Improvement %</option>
+                                <option value="library">Sort by Library</option>
+                                <option value="algorithm">Sort by Algorithm</option>
+                                <option value="blocksize">Sort by Block Size</option>
+                            </select>
+                        </div>
+                        <div class="table-container">
+                            <table id="pgoTable" class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Library</th>
+                                        <th>Algorithm</th>
+                                        <th>Block Size</th>
+                                        <th>No PGO (MB/s)</th>
+                                        <th>With PGO (MB/s)</th>
+                                        <th>Improvement (%)</th>
+                                        <th>Speed Ratio</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pgoTableBody">
                                     <!-- Dynamically populated -->
                                 </tbody>
                             </table>
