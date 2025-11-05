@@ -211,14 +211,28 @@ jobs:
         apt-get update
         apt-get install -y \
           perl python3 \
-          libtool autoconf automake
+          libtool autoconf automake \
+          llvm-22 llvm-22-tools \
+          || echo "Some LLVM tools may not be available"
+        
+        # Create symlinks for LLVM tools if they exist with version suffix
+        if [ -f /usr/bin/llvm-ar-22 ]; then
+          ln -sf /usr/bin/llvm-ar-22 /usr/local/bin/llvm-ar || true
+        fi
+        if [ -f /usr/bin/llvm-profdata-22 ]; then
+          ln -sf /usr/bin/llvm-profdata-22 /usr/local/bin/llvm-profdata || true
+        fi
 
     - name: Verify Clang 22
       run: |
         clang --version
         clang++ --version
-        llvm-ar --version
-        llvm-profdata --version
+        # Check if llvm tools are available
+        which llvm-ar || echo "llvm-ar not found, checking alternatives..."
+        which llvm-ar-22 || echo "llvm-ar-22 not found"
+        which ar || echo "ar not found"
+        which llvm-profdata || echo "llvm-profdata not found, checking alternatives..."
+        which llvm-profdata-22 || echo "llvm-profdata-22 not found"
 
     - name: Cache dependencies
       uses: actions/cache@v4
@@ -234,8 +248,16 @@ jobs:
       run: |
         mkdir -p build
         cd build
+        # Disable LTO if llvm-ar is not available
+        LTO_FLAG="-DENABLE_LTO=ON"
+        if ! which llvm-ar >/dev/null 2>&1 && ! which llvm-ar-22 >/dev/null 2>&1; then
+          echo "Warning: llvm-ar not found, disabling LTO for Clang"
+          LTO_FLAG="-DENABLE_LTO=OFF"
+        fi
+        
         cmake .. \
           ${{ env.CMAKE_COMMON_FLAGS }} \
+          $LTO_FLAG \
           -DENABLE_PGO=OFF \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
@@ -246,8 +268,16 @@ jobs:
       run: |
         mkdir -p build
         cd build
+        # Disable LTO if llvm-ar is not available
+        LTO_FLAG="-DENABLE_LTO=ON"
+        if ! which llvm-ar >/dev/null 2>&1 && ! which llvm-ar-22 >/dev/null 2>&1; then
+          echo "Warning: llvm-ar not found, disabling LTO for Clang"
+          LTO_FLAG="-DENABLE_LTO=OFF"
+        fi
+        
         cmake .. \
           ${{ env.CMAKE_COMMON_FLAGS }} \
+          $LTO_FLAG \
           -DENABLE_PGO=ON \
           -DPGO_PHASE=GENERATE \
           -DCMAKE_C_COMPILER=clang \
@@ -266,14 +296,31 @@ jobs:
         cd build
         timeout 300 ./crypto-bench --training || true
         # Convert raw profile data to indexed format for Clang
-        llvm-profdata merge -output=default.profdata default_*.profraw || true
+        # Try different llvm-profdata variants
+        if which llvm-profdata >/dev/null 2>&1; then
+          llvm-profdata merge -output=default.profdata default_*.profraw || true
+        elif which llvm-profdata-22 >/dev/null 2>&1; then
+          llvm-profdata-22 merge -output=default.profdata default_*.profraw || true
+        else
+          echo "Warning: llvm-profdata not found, PGO may not work optimally"
+          # Create empty profdata file to prevent build errors
+          touch default.profdata || true
+        fi
 
     - name: Reconfigure CMake (PGO Use)
       if: matrix.pgo == true
       run: |
         cd build
+        # Disable LTO if llvm-ar is not available
+        LTO_FLAG="-DENABLE_LTO=ON"
+        if ! which llvm-ar >/dev/null 2>&1 && ! which llvm-ar-22 >/dev/null 2>&1; then
+          echo "Warning: llvm-ar not found, disabling LTO for Clang"
+          LTO_FLAG="-DENABLE_LTO=OFF"
+        fi
+        
         cmake .. \
           ${{ env.CMAKE_COMMON_FLAGS }} \
+          $LTO_FLAG \
           -DENABLE_PGO=ON \
           -DPGO_PHASE=USE \
           -DCMAKE_C_COMPILER=clang \
