@@ -262,7 +262,7 @@ void MbedTLSAES256CBC::encrypt_cbc(
     
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
     psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_ENCRYPT);
-    psa_set_key_algorithm(&attributes, PSA_ALG_CBC_PKCS7);
+    psa_set_key_algorithm(&attributes, PSA_ALG_CBC_NO_PADDING);
     psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
     psa_set_key_bits(&attributes, key_len * 8);
     
@@ -274,7 +274,7 @@ void MbedTLSAES256CBC::encrypt_cbc(
     
     try {
         psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
-        status = psa_cipher_encrypt_setup(&operation, key_id, PSA_ALG_CBC_PKCS7);
+        status = psa_cipher_encrypt_setup(&operation, key_id, PSA_ALG_CBC_NO_PADDING);
         if (status != PSA_SUCCESS) {
             throw std::runtime_error("AES-256-CBC encrypt setup failed");
         }
@@ -286,17 +286,17 @@ void MbedTLSAES256CBC::encrypt_cbc(
         }
         
         size_t output_length = 0;
-        status = psa_cipher_update(&operation, plaintext, plaintext_len, 
-            ciphertext, plaintext_len + 16, &output_length);
+        status = psa_cipher_update(&operation, plaintext, plaintext_len,
+            ciphertext, plaintext_len, &output_length);
         if (status != PSA_SUCCESS) {
             psa_cipher_abort(&operation);
             throw std::runtime_error("AES-256-CBC encryption failed");
         }
         
+        uint8_t finish_buf[16];
         size_t final_length = 0;
-        status = psa_cipher_finish(&operation, ciphertext + output_length, 
-            16, &final_length);
-        if (status != PSA_SUCCESS) {
+        status = psa_cipher_finish(&operation, finish_buf, sizeof(finish_buf), &final_length);
+        if (status != PSA_SUCCESS || final_length != 0) {
             throw std::runtime_error("AES-256-CBC encryption finish failed");
         }
     } catch (...) {
@@ -317,7 +317,7 @@ void MbedTLSAES256CBC::decrypt_cbc(
     
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
     psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_DECRYPT);
-    psa_set_key_algorithm(&attributes, PSA_ALG_CBC_PKCS7);
+    psa_set_key_algorithm(&attributes, PSA_ALG_CBC_NO_PADDING);
     psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
     psa_set_key_bits(&attributes, key_len * 8);
     
@@ -329,7 +329,7 @@ void MbedTLSAES256CBC::decrypt_cbc(
     
     try {
         psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
-        status = psa_cipher_decrypt_setup(&operation, key_id, PSA_ALG_CBC_PKCS7);
+        status = psa_cipher_decrypt_setup(&operation, key_id, PSA_ALG_CBC_NO_PADDING);
         if (status != PSA_SUCCESS) {
             throw std::runtime_error("AES-256-CBC decrypt setup failed");
         }
@@ -341,17 +341,17 @@ void MbedTLSAES256CBC::decrypt_cbc(
         }
         
         size_t output_length = 0;
-        status = psa_cipher_update(&operation, ciphertext, ciphertext_len, 
+        status = psa_cipher_update(&operation, ciphertext, ciphertext_len,
             plaintext, ciphertext_len, &output_length);
         if (status != PSA_SUCCESS) {
             psa_cipher_abort(&operation);
             throw std::runtime_error("AES-256-CBC decryption failed");
         }
         
+        uint8_t finish_buf[16];
         size_t final_length = 0;
-        status = psa_cipher_finish(&operation, plaintext + output_length, 
-            16, &final_length);
-        if (status != PSA_SUCCESS) {
+        status = psa_cipher_finish(&operation, finish_buf, sizeof(finish_buf), &final_length);
+        if (status != PSA_SUCCESS || final_length != 0) {
             throw std::runtime_error("AES-256-CBC decryption finish failed");
         }
     } catch (...) {
