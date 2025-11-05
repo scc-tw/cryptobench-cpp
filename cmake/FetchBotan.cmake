@@ -32,6 +32,8 @@ set(BOTAN_MODULES
 # Determine the OS name for Botan's configure script
 if(APPLE)
     set(BOTAN_OS "darwin")
+elseif(WIN32)
+    set(BOTAN_OS "windows")
 elseif(UNIX)
     set(BOTAN_OS "linux")
 else()
@@ -40,6 +42,17 @@ endif()
 
 # Get compiler flags from our project
 string(REPLACE ";" " " BOTAN_CXXFLAGS "${CRYPTO_BENCH_CXX_FLAGS}")
+
+# Determine the compiler for Botan
+if(MSVC)
+    set(BOTAN_CC "msvc")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(BOTAN_CC "clang")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    set(BOTAN_CC "gcc")
+else()
+    set(BOTAN_CC "gcc")  # Default fallback
+endif()
 
 # Find Python (required for Botan's build system)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -57,15 +70,18 @@ ExternalProject_Add(
         --enable-modules=${BOTAN_MODULES}
         --disable-shared-library
         --os=${BOTAN_OS}
-        --cc=clang
+        --cc=${BOTAN_CC}
         --amalgamation
         --with-build-dir=${BOTAN_BUILD_DIR}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building Botan library..." &&
-        make -C ${BOTAN_BUILD_DIR} libs -j4
+        $<IF:$<BOOL:${WIN32}>,$<IF:$<BOOL:${MSVC}>,nmake -f ${BOTAN_BUILD_DIR}/Makefile libs,mingw32-make -C ${BOTAN_BUILD_DIR} libs -j4>,make -C ${BOTAN_BUILD_DIR} libs -j4>
     INSTALL_COMMAND ""
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
+    BUILD_BYPRODUCTS
+        ${BOTAN_BUILD_DIR}/libbotan-3.a
+        ${BOTAN_BUILD_DIR}/botan.lib
     STEP_TARGETS configure build
 )
 
@@ -73,7 +89,12 @@ ExternalProject_Add(
 add_library(botan::botan STATIC IMPORTED GLOBAL)
 
 # Set properties after the build is complete
-set(BOTAN_LIBRARY ${BOTAN_BUILD_DIR}/libbotan-3.a)
+# Library name differs by platform
+if(WIN32)
+    set(BOTAN_LIBRARY ${BOTAN_BUILD_DIR}/botan.lib)
+else()
+    set(BOTAN_LIBRARY ${BOTAN_BUILD_DIR}/libbotan-3.a)
+endif()
 set_target_properties(botan::botan PROPERTIES
     IMPORTED_LOCATION ${BOTAN_LIBRARY}
 )

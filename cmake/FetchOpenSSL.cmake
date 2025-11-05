@@ -156,6 +156,11 @@ ExternalProject_Add(
         $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
+    BUILD_BYPRODUCTS
+        ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a
+        ${OPENSSL_INSTALL_DIR}/lib/libssl.a
+        ${OPENSSL_INSTALL_DIR}/lib/libcrypto.lib
+        ${OPENSSL_INSTALL_DIR}/lib/libssl.lib
     STEP_TARGETS configure build install
 )
 
