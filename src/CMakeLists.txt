@@ -73,8 +73,32 @@ target_include_directories(crypto-bench PRIVATE
 )
 
 
+# Apply preprocessor defines
+target_compile_definitions(crypto-bench PRIVATE ${CRYPTO_BENCH_DEFINES})
+
 # Link against Google Benchmark
 target_link_libraries(crypto-bench PRIVATE benchmark::benchmark)
+
+# Link against cryptographic libraries
+if(BUILD_CRYPTOPP)
+    target_link_libraries(crypto-bench PRIVATE cryptopp::cryptopp)
+endif()
+
+if(BUILD_OPENSSL)
+    target_link_libraries(crypto-bench PRIVATE OpenSSL::Crypto)
+endif()
+
+if(BUILD_BOTAN)
+    target_link_libraries(crypto-bench PRIVATE botan::botan)
+endif()
+
+if(BUILD_LIBSODIUM)
+    target_link_libraries(crypto-bench PRIVATE libsodium::sodium)
+endif()
+
+if(BUILD_MBEDTLS)
+    target_link_libraries(crypto-bench PRIVATE MbedTLS::mbedcrypto)
+endif()
 
 # Platform-specific linking
 if(UNIX AND NOT APPLE)
@@ -82,32 +106,6 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(crypto-bench PRIVATE pthread rt)
 elseif(APPLE)
     # macOS specific linking if needed
-endif()
-
-# Define preprocessor macros for enabled libraries
-if(BUILD_CRYPTOPP)
-    target_compile_definitions(crypto-bench PRIVATE ENABLE_CRYPTOPP)
-    target_link_libraries(crypto-bench PRIVATE cryptopp::cryptopp)
-endif()
-
-if(BUILD_OPENSSL)
-    target_compile_definitions(crypto-bench PRIVATE ENABLE_OPENSSL)
-    target_link_libraries(crypto-bench PRIVATE OpenSSL::Crypto OpenSSL::SSL)
-endif()
-
-if(BUILD_BOTAN)
-    target_compile_definitions(crypto-bench PRIVATE ENABLE_BOTAN)
-    target_link_libraries(crypto-bench PRIVATE botan::botan)
-endif()
-
-if(BUILD_LIBSODIUM)
-    target_compile_definitions(crypto-bench PRIVATE ENABLE_LIBSODIUM)
-    target_link_libraries(crypto-bench PRIVATE libsodium)
-endif()
-
-if(BUILD_MBEDTLS)
-    target_compile_definitions(crypto-bench PRIVATE ENABLE_MBEDTLS)
-    target_link_libraries(crypto-bench PRIVATE MbedTLS::mbedcrypto)
 endif()
 
 # Set output directory

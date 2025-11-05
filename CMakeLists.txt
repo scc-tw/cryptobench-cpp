@@ -84,6 +84,24 @@ if(NOT BUILD_CRYPTOPP AND NOT BUILD_OPENSSL AND NOT BUILD_BOTAN AND
     message(FATAL_ERROR "At least one cryptographic library must be enabled")
 endif()
 
+# Define preprocessor macros for enabled libraries
+set(CRYPTO_BENCH_DEFINES "")
+if(BUILD_CRYPTOPP)
+    list(APPEND CRYPTO_BENCH_DEFINES ENABLE_CRYPTOPP)
+endif()
+if(BUILD_OPENSSL)
+    list(APPEND CRYPTO_BENCH_DEFINES ENABLE_OPENSSL)
+endif()
+if(BUILD_BOTAN)
+    list(APPEND CRYPTO_BENCH_DEFINES ENABLE_BOTAN)
+endif()
+if(BUILD_LIBSODIUM)
+    list(APPEND CRYPTO_BENCH_DEFINES ENABLE_LIBSODIUM)
+endif()
+if(BUILD_MBEDTLS)
+    list(APPEND CRYPTO_BENCH_DEFINES ENABLE_MBEDTLS)
+endif()
+
 # Add source directory
 add_subdirectory(src)
 
