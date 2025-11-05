@@ -93,6 +93,7 @@ if(BUILD_LIBSODIUM)
 endif()
 
 if(BUILD_MBEDTLS)
+    # mbedTLS 4.0.0 renamed mbedcrypto to tfpsacrypto, but we use the compatibility alias
     target_link_libraries(crypto-bench PRIVATE MbedTLS::mbedcrypto)
 endif()
 

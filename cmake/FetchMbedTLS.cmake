@@ -11,11 +11,13 @@ set(GIT_SSL_NO_VERIFY 1)
 set(CMAKE_TLS_VERIFY FALSE)
 
 # Fetch mbedTLS source using Git (includes submodules)
+# Note: mbedTLS 4.0.0 requires recursive submodule initialization for TF-PSA-Crypto
 FetchContent_Declare(
     mbedtls_src
     GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
     GIT_TAG        v4.0.0
     GIT_SHALLOW    FALSE  # Need full clone for submodules
+    GIT_SUBMODULES_RECURSE TRUE  # Need TF-PSA-Crypto submodule
     GIT_PROGRESS   TRUE
 )
 
@@ -32,24 +34,34 @@ set(MBEDTLS_BUILD_TESTS OFF CACHE BOOL "")
 # Make mbedTLS available
 FetchContent_MakeAvailable(mbedtls_src)
 
-# The mbedTLS CMake creates these targets:
-# - mbedcrypto (cryptographic primitives)
+# The mbedTLS 4.0.0 CMake creates these targets:
+# - tfpsacrypto (cryptographic primitives - renamed from mbedcrypto in 4.0)
 # - mbedx509 (X.509 certificate handling)
 # - mbedtls (TLS/SSL)
 
-# We mainly need mbedcrypto for hash functions
-if(TARGET mbedcrypto)
+# We mainly need tfpsacrypto for cryptographic functions
+if(TARGET tfpsacrypto)
     message(STATUS "mbedTLS 4.0.0 configured successfully")
 
     # Apply our optimization flags to mbedTLS targets
-    target_compile_options(mbedcrypto PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
-    target_compile_options(mbedx509 PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
-    target_compile_options(mbedtls PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+    target_compile_options(tfpsacrypto PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+    if(TARGET mbedx509)
+        target_compile_options(mbedx509 PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+    endif()
+    if(TARGET mbedtls)
+        target_compile_options(mbedtls PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+    endif()
 
     # Create alias targets for easier access
-    add_library(MbedTLS::mbedcrypto ALIAS mbedcrypto)
-    add_library(MbedTLS::mbedx509 ALIAS mbedx509)
-    add_library(MbedTLS::mbedtls ALIAS mbedtls)
+    # We create both the new name and compatibility name
+    add_library(MbedTLS::tfpsacrypto ALIAS tfpsacrypto)
+    add_library(MbedTLS::mbedcrypto ALIAS tfpsacrypto)  # Compatibility alias
+    if(TARGET mbedx509)
+        add_library(MbedTLS::mbedx509 ALIAS mbedx509)
+    endif()
+    if(TARGET mbedtls)
+        add_library(MbedTLS::mbedtls ALIAS mbedtls)
+    endif()
 else()
-    message(FATAL_ERROR "Failed to configure mbedTLS - mbedcrypto target not found")
+    message(FATAL_ERROR "Failed to configure mbedTLS - tfpsacrypto target not found (renamed from mbedcrypto in 4.0.0)")
 endif()
