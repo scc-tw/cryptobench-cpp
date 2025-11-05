@@ -57,6 +57,20 @@ endif()
 # Find Python (required for Botan's build system)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+# Determine the build command based on the platform
+if(WIN32)
+    if(MSVC)
+        # Visual Studio uses nmake
+        set(BOTAN_BUILD_CMD nmake -f ${BOTAN_BUILD_DIR}/Makefile libs)
+    else()
+        # MinGW uses mingw32-make
+        set(BOTAN_BUILD_CMD mingw32-make -C ${BOTAN_BUILD_DIR} libs -j${CMAKE_BUILD_PARALLEL_LEVEL})
+    endif()
+else()
+    # Unix/Linux/macOS use regular make
+    set(BOTAN_BUILD_CMD make -C ${BOTAN_BUILD_DIR} libs -j${CMAKE_BUILD_PARALLEL_LEVEL})
+endif()
+
 # Use ExternalProject_Add to build Botan
 # Since we need the amalgamation, we'll use a custom build command
 ExternalProject_Add(
@@ -75,7 +89,7 @@ ExternalProject_Add(
         --with-build-dir=${BOTAN_BUILD_DIR}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building Botan library..." &&
-        $<IF:$<BOOL:${WIN32}>,$<IF:$<BOOL:${MSVC}>,nmake -f ${BOTAN_BUILD_DIR}/Makefile libs,mingw32-make -C ${BOTAN_BUILD_DIR} libs -j4>,make -C ${BOTAN_BUILD_DIR} libs -j4>
+        ${BOTAN_BUILD_CMD}
     INSTALL_COMMAND ""
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
