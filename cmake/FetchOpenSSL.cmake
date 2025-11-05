@@ -153,7 +153,7 @@ ExternalProject_Add(
         ${OPENSSL_CONFIG_OPTIONS}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
-        $<IF:$<BOOL:${WIN32}>,nmake,make> -j
+        $<IF:$<BOOL:${WIN32}>,nmake,make -j${CMAKE_BUILD_PARALLEL_LEVEL}>
     INSTALL_COMMAND
         $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0

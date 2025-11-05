@@ -97,7 +97,7 @@ else()
         COMMAND ${CMAKE_COMMAND} -E env 
             CXX=${CMAKE_CXX_COMPILER}
             CC=${CMAKE_C_COMPILER}
-            CXXFLAGS="-DNDEBUG -O3 -fPIC -march=native -mtune=native -fomit-frame-pointer -funroll-loops ${CRYPTOPP_WARNING_FLAGS}"
+            CXXFLAGS="-O3 -fPIC -march=native -mtune=native -fomit-frame-pointer -funroll-loops ${CRYPTOPP_WARNING_FLAGS}"
             make -j${CMAKE_BUILD_PARALLEL_LEVEL} ${CRYPTOPP_MAKE_TARGET}
         WORKING_DIRECTORY ${CRYPTOPP_SOURCE_DIR}
         COMMENT "Building Crypto++ 8.9.0..."
