@@ -28,6 +28,15 @@ if(DEFINED ENV{CI})
     set(OPENSSL_JOBS 2)
 endif()
 
+# Select platform-specific build/install commands (avoid generator expressions here)
+if(WIN32)
+    set(OPENSSL_BUILD_CMD nmake)
+    set(OPENSSL_INSTALL_CMD nmake install_sw)
+else()
+    set(OPENSSL_BUILD_CMD make -j${OPENSSL_JOBS})
+    set(OPENSSL_INSTALL_CMD make install_sw)
+endif()
+
 # Determine the target platform for OpenSSL's Configure script
 if(APPLE)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
@@ -159,9 +168,9 @@ ExternalProject_Add(
         ${OPENSSL_CONFIG_OPTIONS}
     BUILD_COMMAND
         ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
-        $<IF:$<BOOL:${WIN32}>,nmake,make -j${OPENSSL_JOBS}>
+        ${OPENSSL_BUILD_CMD}
     INSTALL_COMMAND
-        $<IF:$<BOOL:${WIN32}>,nmake,make> install_sw  # install_sw = install software only (no docs)
+        ${OPENSSL_INSTALL_CMD}  # install_sw = install software only (no docs)
     BUILD_IN_SOURCE 0
     BUILD_ALWAYS 0
     BUILD_BYPRODUCTS
