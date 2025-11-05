@@ -20,6 +20,7 @@ include:
   - "*.js"
   - "*.css"
   - "*.json"
+  - "result.json"
 
 exclude:
   - "Gemfile"

@@ -186,9 +186,23 @@ class CryptoBenchDashboard {
     }
 
     loadSampleData() {
-        // Generate sample data for demonstration
-        this.data = this.generateSampleData();
-        this.renderDashboard();
+        // Prefer loading local result.json (checked into docs/) as sample data
+        this.showLoading();
+        fetch('result.json')
+            .then(resp => {
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                return resp.json();
+            })
+            .then(raw => {
+                this.data = this.normalizeData(raw);
+                this.renderDashboard();
+            })
+            .catch(err => {
+                // Fallback to generated sample if local file is unavailable
+                this.showError(`Failed to load result.json: ${err.message}. Falling back to generated sample data.`);
+                this.data = this.generateSampleData();
+                this.renderDashboard();
+            });
     }
 
     generateSampleData() {
