@@ -27,8 +27,7 @@ endif()
 # Additional fallback for regex issues - use no regex backend
 set(BENCHMARK_USE_BUNDLED_GTEST OFF CACHE BOOL "Don't use bundled GTest" FORCE)
 
-# Use the same optimization flags for Google Benchmark
-set(BENCHMARK_CXX_FLAGS "${CRYPTO_BENCH_CXX_FLAGS_STR}" CACHE STRING "Benchmark C++ flags" FORCE)
+# Do not inject global LTO flags into Google Benchmark to avoid passing -flto to archiver
 
 message(STATUS "Fetching Google Benchmark...")
 
@@ -45,16 +44,24 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 # Apply our optimization flags to the benchmark library
 if(TARGET benchmark)
-    # Remove default flags and apply our own
+    # Apply our flags but strip any LTO options to prevent -flto reaching llvm-ar
+    set(BENCH_NO_LTO_FLAGS ${CRYPTO_BENCH_CXX_FLAGS})
+    list(FILTER BENCH_NO_LTO_FLAGS EXCLUDE REGEX "^-flto(=.+)?$")
+
+    # Remove default -O? and apply filtered flags
     get_target_property(benchmark_options benchmark COMPILE_OPTIONS)
     if(benchmark_options)
         list(FILTER benchmark_options EXCLUDE REGEX "-O[0-3]")
     endif()
-    target_compile_options(benchmark PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+    target_compile_options(benchmark PRIVATE ${BENCH_NO_LTO_FLAGS})
+
+    # Ensure IPO is disabled on this external static lib
+    set_property(TARGET benchmark PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
 
     # Also apply to benchmark_main if it exists
     if(TARGET benchmark_main)
-        target_compile_options(benchmark_main PRIVATE ${CRYPTO_BENCH_CXX_FLAGS})
+        target_compile_options(benchmark_main PRIVATE ${BENCH_NO_LTO_FLAGS})
+        set_property(TARGET benchmark_main PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
     endif()
 
     message(STATUS "Google Benchmark fetched and configured successfully")
