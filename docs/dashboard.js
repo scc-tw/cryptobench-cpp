@@ -104,6 +104,61 @@ class CryptoBenchDashboard {
         this.hideLoading();
     }
 
+    normalizeData(raw) {
+        // If already in aggregated summary format
+        if (raw && Array.isArray(raw.configurations)) {
+            // Ensure summary_metadata exists
+            if (!raw.summary_metadata) {
+                raw.summary_metadata = {
+                    generated_at: new Date().toISOString(),
+                    total_configurations: raw.configurations.length,
+                    workflow_run_id: '',
+                    commit_sha: '',
+                    repository: ''
+                };
+            }
+            return raw;
+        }
+
+        // If single processed results with benchmarks array
+        if (raw && Array.isArray(raw.benchmarks)) {
+            const meta = raw.metadata || {};
+            const cfg = {
+                compiler: meta.compiler || 'unknown',
+                platform: meta.platform || 'unknown',
+                pgo_enabled: Boolean(meta.pgo_enabled),
+                benchmark_count: raw.benchmarks.length,
+                benchmarks: raw.benchmarks.map(b => ({
+                    name: b.name || `${b.library || 'unknown'}/${b.algorithm || 'unknown'}/${b.input_size || 'unknown'}`,
+                    library: b.library || 'unknown',
+                    algorithm: b.algorithm || 'unknown',
+                    input_size: String(b.input_size ?? 'unknown'),
+                    time_ns: b.time_ns ?? b.real_time ?? 0,
+                    bytes_per_second: b.bytes_per_second ?? 0,
+                    iterations: b.iterations ?? 0
+                }))
+            };
+
+            return {
+                summary_metadata: {
+                    generated_at: meta.timestamp || new Date().toISOString(),
+                    total_configurations: 1,
+                    workflow_run_id: meta.workflow_run_id || '',
+                    commit_sha: meta.commit_sha || '',
+                    repository: ''
+                },
+                configurations: [cfg],
+                performance_comparison: raw.performance_comparison || {
+                    fastest_by_algorithm: {},
+                    compiler_rankings: {},
+                    pgo_impact: {}
+                }
+            };
+        }
+
+        throw new Error('Unrecognized results format');
+    }
+
     async loadBenchmarkData() {
         const url = document.getElementById('jsonUrl').value.trim();
         if (!url) {
@@ -123,7 +178,7 @@ class CryptoBenchDashboard {
             }
             
             const data = await response.json();
-            this.data = data;
+            this.data = this.normalizeData(data);
             this.renderDashboard();
         } catch (error) {
             this.showError(`Failed to load benchmark data: ${error.message}`);
@@ -195,6 +250,10 @@ class CryptoBenchDashboard {
 
     renderDashboard() {
         this.hideLoading();
+        if (!this.data || !Array.isArray(this.data.configurations) || this.data.configurations.length === 0) {
+            this.showError('No configurations found in data.');
+            return;
+        }
         this.renderStats();
         this.renderCharts();
         document.getElementById('statsGrid').style.display = 'grid';
