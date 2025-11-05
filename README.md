@@ -45,7 +45,7 @@ This suite benchmarks the **16 most commonly used cryptographic functions** in p
 ## 🔧 Build Requirements
 
 ### Prerequisites
-- C++17 or later compiler (GCC 9+, Clang 10+, or MSVC 2019+)
+- C++20 or later compiler (GCC 9+, Clang 10+, or MSVC 2019+)
 - CMake 3.16 or later
 - Git for fetching dependencies
 - Python 3.6+ (for build scripts and PGO training)
@@ -315,7 +315,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 2. **Build Failures**
    - Clear build directory and CMake cache
-   - Verify compiler supports C++17
+   - Verify compiler supports C++20
    - Check available memory for LTO builds (may require 8GB+)
 
 3. **Inconsistent Results**

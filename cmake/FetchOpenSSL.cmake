@@ -52,7 +52,7 @@ string(REPLACE ";" " " OPENSSL_CXXFLAGS "${CRYPTO_BENCH_CXX_FLAGS}")
 find_package(Perl REQUIRED)
 
 # Configure OpenSSL build options
-# We want static libraries only, minimal configuration for crypto benchmarks
+# We want static libraries only, but keep all crypto functionality we need
 set(OPENSSL_CONFIG_OPTIONS
     --prefix=${OPENSSL_INSTALL_DIR}
     --openssldir=${OPENSSL_INSTALL_DIR}/ssl
@@ -62,32 +62,21 @@ set(OPENSSL_CONFIG_OPTIONS
     no-tests                     # Don't build tests
     no-fuzz-libfuzzer           # Don't build fuzzing tests
     no-fuzz-afl                 # Don't build AFL fuzzing
-    enable-static-engine        # Enable static engines
+    
+    # Disable SSL/TLS (we only want crypto)
     no-ssl3                     # Disable SSL 3.0
     no-ssl3-method             # Disable SSL 3.0 methods
-    no-weak-ssl-ciphers        # Disable weak ciphers
-    no-zlib                    # Don't use zlib compression
-    no-zlib-dynamic            # Don't use dynamic zlib
-    no-comp                    # Disable compression
-    no-deprecated              # Don't include deprecated APIs
-    no-legacy                  # Don't build legacy provider
-    no-module                  # Don't build loadable modules
-    no-dynamic-engine          # Don't build dynamic engines
-    no-err                     # Don't include error strings (saves space)
-    no-ts                      # Don't build timestamping
-    no-cms                     # Don't build CMS
-    no-ct                      # Don't build certificate transparency
-    no-dgram                   # Don't build datagram support
-    no-dtls                    # Don't build DTLS
-    no-dtls1                   # Don't build DTLSv1
-    no-dtls1_2                 # Don't build DTLSv1.2
     no-tls1                    # Don't build TLSv1
     no-tls1_1                  # Don't build TLSv1.1
     no-tls1_2                  # Don't build TLSv1.2
     no-tls1_3                  # Don't build TLSv1.3
     no-ssl                     # Don't build SSL/TLS (we only want crypto)
-    no-srp                     # Don't build SRP
-    no-psk                     # Don't build PSK
+    no-dtls                    # Don't build DTLS
+    no-dtls1                   # Don't build DTLSv1
+    no-dtls1_2                 # Don't build DTLSv1.2
+    
+    # Disable unused/legacy ciphers but keep what we need
+    no-weak-ssl-ciphers        # Disable weak ciphers
     no-idea                    # Don't build IDEA cipher
     no-mdc2                    # Don't build MDC2
     no-rc5                     # Don't build RC5
@@ -95,12 +84,35 @@ set(OPENSSL_CONFIG_OPTIONS
     no-bf                      # Don't build Blowfish
     no-cast                    # Don't build CAST
     no-des                     # Don't build DES (deprecated)
-    no-dh                      # Don't build Diffie-Hellman
-    no-dsa                     # Don't build DSA
+    
+    # Disable protocols we don't need
+    no-srp                     # Don't build SRP
+    no-psk                     # Don't build PSK
+    no-ts                      # Don't build timestamping
+    no-cms                     # Don't build CMS
+    no-ct                      # Don't build certificate transparency
+    
+    # Disable compression and dynamic features
+    no-zlib                    # Don't use zlib compression
+    no-zlib-dynamic            # Don't use dynamic zlib
+    no-comp                    # Disable compression
+    no-dgram                   # Don't build datagram support
+    no-module                  # Don't build loadable modules
+    no-dynamic-engine          # Don't build dynamic engines
     no-engine                  # Don't build engines
     no-async                   # Don't build async support
-    no-autoalginit            # Don't auto-initialize algorithms
-    no-autoerrinit            # Don't auto-initialize error strings
+    
+    # Keep essential crypto features enabled:
+    # - Hash functions: SHA-256, SHA-512, SHA3-256, BLAKE2b (enabled by default)
+    # - AES: AES-128-GCM, AES-256-GCM, AES-256-CBC (enabled by default)
+    # - ChaCha20-Poly1305 (enabled by default in OpenSSL 3.x)
+    # - RSA: RSA-2048, RSA-4096 (enabled by default)
+    # - ECDSA: ECDSA-P256 (enabled by default)
+    # - Ed25519 (enabled by default in OpenSSL 3.x)
+    # - ECDH: ECDH-P256 (enabled by default)
+    # - X25519 (enabled by default in OpenSSL 3.x)
+    # - HMAC-SHA256 (enabled by default)
+    # - Poly1305 (enabled by default in OpenSSL 3.x)
 )
 
 # Use ExternalProject_Add to build OpenSSL

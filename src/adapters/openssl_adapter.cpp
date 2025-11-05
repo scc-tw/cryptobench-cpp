@@ -189,7 +189,34 @@ void OpenSSLAES256GCM::encrypt(
     uint8_t* ciphertext,
     uint8_t* tag, size_t tag_len
 ) {
-    throw std::runtime_error("OpenSSL AES-256-GCM encrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        throw std::runtime_error("Failed to create cipher context");
+    }
+
+    int len;
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr) != 1 ||
+        EVP_EncryptInit_ex(ctx, nullptr, nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-GCM encrypt init failed");
+    }
+
+    if (aad && aad_len > 0) {
+        if (EVP_EncryptUpdate(ctx, nullptr, &len, aad, aad_len) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("AES-256-GCM AAD failed");
+        }
+    }
+
+    if (EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len) != 1 ||
+        EVP_EncryptFinal_ex(ctx, ciphertext + len, &len) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, tag_len, tag) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-GCM encrypt failed");
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 bool OpenSSLAES256GCM::decrypt(
@@ -200,7 +227,40 @@ bool OpenSSLAES256GCM::decrypt(
     const uint8_t* tag, size_t tag_len,
     uint8_t* plaintext
 ) {
-    throw std::runtime_error("OpenSSL AES-256-GCM decrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        return false;
+    }
+
+    int len;
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv_len, nullptr) != 1 ||
+        EVP_DecryptInit_ex(ctx, nullptr, nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    if (aad && aad_len > 0) {
+        if (EVP_DecryptUpdate(ctx, nullptr, &len, aad, aad_len) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            return false;
+        }
+    }
+
+    if (EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag_len, const_cast<uint8_t*>(tag)) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    int ret = EVP_DecryptFinal_ex(ctx, plaintext + len, &len);
+    EVP_CIPHER_CTX_free(ctx);
+    
+    return ret > 0;
 }
 
 void OpenSSLAES256CBC::encrypt(
@@ -234,7 +294,32 @@ void OpenSSLAES256CBC::encrypt_cbc(
     const uint8_t* iv, size_t iv_len,
     uint8_t* ciphertext
 ) {
-    throw std::runtime_error("OpenSSL AES-256-CBC encrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        throw std::runtime_error("Failed to create cipher context");
+    }
+
+    int len;
+    int ciphertext_len_total = 0;
+    
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC encrypt init failed");
+    }
+
+    if (EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC encrypt update failed");
+    }
+    ciphertext_len_total = len;
+
+    if (EVP_EncryptFinal_ex(ctx, ciphertext + len, &len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC encrypt final failed");
+    }
+    ciphertext_len_total += len;
+
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 void OpenSSLAES256CBC::decrypt_cbc(
@@ -243,7 +328,32 @@ void OpenSSLAES256CBC::decrypt_cbc(
     const uint8_t* iv, size_t iv_len,
     uint8_t* plaintext
 ) {
-    throw std::runtime_error("OpenSSL AES-256-CBC decrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        throw std::runtime_error("Failed to create cipher context");
+    }
+
+    int len;
+    int plaintext_len_total = 0;
+    
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC decrypt init failed");
+    }
+
+    if (EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC decrypt update failed");
+    }
+    plaintext_len_total = len;
+
+    if (EVP_DecryptFinal_ex(ctx, plaintext + len, &len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("AES-256-CBC decrypt final failed");
+    }
+    plaintext_len_total += len;
+
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 void OpenSSLChaCha20Poly1305::encrypt(
@@ -254,7 +364,34 @@ void OpenSSLChaCha20Poly1305::encrypt(
     uint8_t* ciphertext,
     uint8_t* tag, size_t tag_len
 ) {
-    throw std::runtime_error("OpenSSL ChaCha20-Poly1305 encrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        throw std::runtime_error("Failed to create cipher context");
+    }
+
+    int len;
+    if (EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), nullptr, nullptr, nullptr) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, iv_len, nullptr) != 1 ||
+        EVP_EncryptInit_ex(ctx, nullptr, nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("ChaCha20-Poly1305 encrypt init failed");
+    }
+
+    if (aad && aad_len > 0) {
+        if (EVP_EncryptUpdate(ctx, nullptr, &len, aad, aad_len) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            throw std::runtime_error("ChaCha20-Poly1305 AAD failed");
+        }
+    }
+
+    if (EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len) != 1 ||
+        EVP_EncryptFinal_ex(ctx, ciphertext + len, &len) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tag_len, tag) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        throw std::runtime_error("ChaCha20-Poly1305 encrypt failed");
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 bool OpenSSLChaCha20Poly1305::decrypt(
@@ -265,7 +402,40 @@ bool OpenSSLChaCha20Poly1305::decrypt(
     const uint8_t* tag, size_t tag_len,
     uint8_t* plaintext
 ) {
-    throw std::runtime_error("OpenSSL ChaCha20-Poly1305 decrypt not implemented yet");
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        return false;
+    }
+
+    int len;
+    if (EVP_DecryptInit_ex(ctx, EVP_chacha20_poly1305(), nullptr, nullptr, nullptr) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, iv_len, nullptr) != 1 ||
+        EVP_DecryptInit_ex(ctx, nullptr, nullptr, key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    if (aad && aad_len > 0) {
+        if (EVP_DecryptUpdate(ctx, nullptr, &len, aad, aad_len) != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            return false;
+        }
+    }
+
+    if (EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tag_len, const_cast<uint8_t*>(tag)) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return false;
+    }
+
+    int ret = EVP_DecryptFinal_ex(ctx, plaintext + len, &len);
+    EVP_CIPHER_CTX_free(ctx);
+    
+    return ret > 0;
 }
 
 // =============================================================================
@@ -384,7 +554,34 @@ void OpenSSLPoly1305::compute(
     const uint8_t* key, size_t key_len,
     uint8_t* mac, size_t mac_len
 ) {
-    throw std::runtime_error("OpenSSL Poly1305 MAC not implemented yet");
+    EVP_MAC* poly1305 = EVP_MAC_fetch(nullptr, "POLY1305", nullptr);
+    if (!poly1305) {
+        throw std::runtime_error("Failed to fetch Poly1305 MAC");
+    }
+
+    EVP_MAC_CTX* ctx = EVP_MAC_CTX_new(poly1305);
+    EVP_MAC_free(poly1305);
+    if (!ctx) {
+        throw std::runtime_error("Failed to create Poly1305 MAC context");
+    }
+
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_END
+    };
+
+    if (EVP_MAC_init(ctx, key, key_len, params) != 1 ||
+        EVP_MAC_update(ctx, message, message_len) != 1) {
+        EVP_MAC_CTX_free(ctx);
+        throw std::runtime_error("Poly1305 MAC computation failed");
+    }
+
+    size_t out_len = mac_len;
+    if (EVP_MAC_final(ctx, mac, &out_len, mac_len) != 1) {
+        EVP_MAC_CTX_free(ctx);
+        throw std::runtime_error("Poly1305 MAC finalization failed");
+    }
+
+    EVP_MAC_CTX_free(ctx);
 }
 
 bool OpenSSLPoly1305::verify(
@@ -392,7 +589,13 @@ bool OpenSSLPoly1305::verify(
     const uint8_t* key, size_t key_len,
     const uint8_t* mac, size_t mac_len
 ) {
-    throw std::runtime_error("OpenSSL Poly1305 MAC verification not implemented yet");
+    uint8_t computed_mac[16];
+    try {
+        compute(message, message_len, key, key_len, computed_mac, sizeof(computed_mac));
+        return CRYPTO_memcmp(computed_mac, mac, mac_len) == 0;
+    } catch (...) {
+        return false;
+    }
 }
 
 // =============================================================================
