@@ -408,6 +408,33 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
    objdump -d crypto-bench | grep -c "vpaes\|aesni"  # Check for AES-NI instructions
    ```
 
+## ⚠️ Security Notice
+
+### Crypto++ 8.9.0 Compiler Warnings
+
+**IMPORTANT**: During compilation, GCC may report stringop-overflow warnings in Crypto++ 8.9.0 code:
+
+```
+warning: specified bound 18446744073709551612 exceeds maximum object size
+in esign.cpp:115:14 (InvertibleESIGNFunction::GenerateRandom)
+```
+
+**Investigation Status:**
+- **Suspicious value**: `18446744073709551612` = `0xFFFFFFFFFFFFFFFC` (suggests integer underflow)
+- **Location**: ESIGN signature algorithm implementation
+- **Potential causes**: Integer underflow, uninitialized variable, or pointer arithmetic error
+
+**Mitigation:**
+- Warnings are currently suppressed to allow benchmarking
+- **Do NOT use in production** without security review
+- Monitor for Crypto++ security updates
+- Consider alternative libraries for production use
+
+**Action Items:**
+- [ ] Test with newer Crypto++ versions when available
+- [ ] Report to Crypto++ maintainers for investigation
+- [ ] Monitor CVE databases for related vulnerabilities
+
 ## 🐛 Troubleshooting
 
 ### Common Issues

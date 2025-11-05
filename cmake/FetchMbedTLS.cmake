@@ -21,7 +21,8 @@ FetchContent_Declare(
     GIT_PROGRESS   TRUE
 )
 
-# Configure mbedTLS build options
+# Configure mbedTLS build options BEFORE FetchContent_MakeAvailable
+# These need to be set before the mbedTLS project is configured
 set(ENABLE_TESTING OFF CACHE BOOL "")
 set(ENABLE_PROGRAMS OFF CACHE BOOL "")
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "")
@@ -31,7 +32,24 @@ set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "")
 # Disable unnecessary features to speed up build
 set(MBEDTLS_BUILD_TESTS OFF CACHE BOOL "")
 
-# Make mbedTLS available
+# IMPORTANT: mbedTLS 4.0.0 requires Python to generate source files
+# The generated files are created during the configuration step
+# We need to ensure Python is available before configuring mbedTLS
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+if(NOT Python3_FOUND)
+    message(FATAL_ERROR "Python 3 is required to build mbedTLS 4.0.0 (for generating source files)")
+endif()
+
+# Set the Python executable for mbedTLS to use
+set(MBEDTLS_PYTHON_EXECUTABLE ${Python3_EXECUTABLE} CACHE FILEPATH "Python executable for mbedTLS")
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE} CACHE FILEPATH "Python executable")
+
+# IMPORTANT: For mbedTLS 4.0.0, we need to ensure generated files are created
+# The build system expects certain files to be generated during configuration
+# Setting this option helps ensure they are generated correctly
+set(GEN_FILES ON CACHE BOOL "Generate required source files for mbedTLS")
+
+# Make mbedTLS available - this will run the configuration which generates the required files
 FetchContent_MakeAvailable(mbedtls_src)
 
 # The mbedTLS 4.0.0 CMake creates these targets:
