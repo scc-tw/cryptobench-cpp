@@ -82,6 +82,8 @@ endif()
 
 if(BUILD_OPENSSL)
     target_link_libraries(crypto-bench PRIVATE OpenSSL::Crypto)
+    # Ensure OpenSSL external project (and installed headers) are ready before compiling
+    add_dependencies(crypto-bench openssl_external)
 endif()
 
 if(BUILD_BOTAN)

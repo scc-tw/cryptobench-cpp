@@ -185,8 +185,8 @@ function(setup_openssl_targets)
     else()
         set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_BUILD_DIR}/libcrypto.a)
         set(OPENSSL_SSL_LIBRARY ${OPENSSL_BUILD_DIR}/libssl.a)
-        # Use headers from the source tree; OpenSSL does not populate a build include dir on all platforms
-        set(OPENSSL_INCLUDE_DIR "${OPENSSL_SOURCE_DIR}/include")
+        # Use installed headers to ensure generated configuration.h is available
+        set(OPENSSL_INCLUDE_DIR "${OPENSSL_INSTALL_DIR}/include")
     endif()
 
     # Ensure no stale include dirs remain on reconfigure

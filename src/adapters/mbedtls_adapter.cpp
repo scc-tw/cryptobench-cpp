@@ -105,16 +105,19 @@ void MbedTLSAES128GCM::encrypt(
     }
     
     try {
+        // PSA AEAD encrypt writes ciphertext+tag to a single buffer
+        std::vector<uint8_t> output_buffer(plaintext_len + tag_len);
         size_t output_length;
         status = psa_aead_encrypt(key_id, PSA_ALG_GCM, iv, iv_len, aad, aad_len,
-            plaintext, plaintext_len, ciphertext, plaintext_len + tag_len, &output_length);
+            plaintext, plaintext_len, output_buffer.data(), output_buffer.size(), &output_length);
         
         if (status != PSA_SUCCESS) {
             throw std::runtime_error("AES-128-GCM encryption failed");
         }
         
-        // Copy tag from end of ciphertext buffer
-        memcpy(tag, ciphertext + plaintext_len, tag_len);
+        // Separate ciphertext and tag
+        memcpy(ciphertext, output_buffer.data(), plaintext_len);
+        memcpy(tag, output_buffer.data() + plaintext_len, tag_len);
     } catch (...) {
         psa_destroy_key(key_id);
         throw;
@@ -187,16 +190,19 @@ void MbedTLSAES256GCM::encrypt(
     }
     
     try {
+        // PSA AEAD encrypt writes ciphertext+tag to a single buffer
+        std::vector<uint8_t> output_buffer(plaintext_len + tag_len);
         size_t output_length;
         status = psa_aead_encrypt(key_id, PSA_ALG_GCM, iv, iv_len, aad, aad_len,
-            plaintext, plaintext_len, ciphertext, plaintext_len + tag_len, &output_length);
+            plaintext, plaintext_len, output_buffer.data(), output_buffer.size(), &output_length);
         
         if (status != PSA_SUCCESS) {
             throw std::runtime_error("AES-256-GCM encryption failed");
         }
         
-        // Copy tag from end of ciphertext buffer
-        memcpy(tag, ciphertext + plaintext_len, tag_len);
+        // Separate ciphertext and tag
+        memcpy(ciphertext, output_buffer.data(), plaintext_len);
+        memcpy(tag, output_buffer.data() + plaintext_len, tag_len);
     } catch (...) {
         psa_destroy_key(key_id);
         throw;
@@ -380,16 +386,19 @@ void MbedTLSChaCha20Poly1305::encrypt(
     }
     
     try {
+        // PSA AEAD encrypt writes ciphertext+tag to a single buffer
+        std::vector<uint8_t> output_buffer(plaintext_len + tag_len);
         size_t output_length;
         status = psa_aead_encrypt(key_id, PSA_ALG_CHACHA20_POLY1305, iv, iv_len, aad, aad_len,
-            plaintext, plaintext_len, ciphertext, plaintext_len + tag_len, &output_length);
+            plaintext, plaintext_len, output_buffer.data(), output_buffer.size(), &output_length);
         
         if (status != PSA_SUCCESS) {
             throw std::runtime_error("ChaCha20-Poly1305 encryption failed");
         }
         
-        // Copy tag from end of ciphertext buffer
-        memcpy(tag, ciphertext + plaintext_len, tag_len);
+        // Separate ciphertext and tag
+        memcpy(ciphertext, output_buffer.data(), plaintext_len);
+        memcpy(tag, output_buffer.data() + plaintext_len, tag_len);
     } catch (...) {
         psa_destroy_key(key_id);
         throw;
