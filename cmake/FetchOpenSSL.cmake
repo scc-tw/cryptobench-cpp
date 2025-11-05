@@ -1,0 +1,182 @@
+# FetchOpenSSL.cmake - Fetch and configure OpenSSL 3.6.0
+#
+# OpenSSL is the industry-standard cryptographic library
+
+include(FetchContent)
+include(ExternalProject)
+
+message(STATUS "Fetching OpenSSL 3.6.0...")
+
+# Fetch OpenSSL source
+FetchContent_Declare(
+    openssl_src
+    GIT_REPOSITORY https://github.com/openssl/openssl.git
+    GIT_TAG        openssl-3.6.0  # Version 3.6.0 as confirmed in release
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
+)
+
+FetchContent_GetProperties(openssl_src)
+if(NOT openssl_src_POPULATED)
+    FetchContent_Populate(openssl_src)
+endif()
+
+set(OPENSSL_SOURCE_DIR ${openssl_src_SOURCE_DIR})
+set(OPENSSL_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl-build)
+set(OPENSSL_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl-install)
+
+# Determine the target platform for OpenSSL's Configure script
+if(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(OPENSSL_TARGET "darwin64-arm64-cc")
+    else()
+        set(OPENSSL_TARGET "darwin64-x86_64-cc")
+    endif()
+elseif(UNIX)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+        set(OPENSSL_TARGET "linux-x86_64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        set(OPENSSL_TARGET "linux-aarch64")
+    else()
+        set(OPENSSL_TARGET "linux-generic64")
+    endif()
+else()
+    message(FATAL_ERROR "Unsupported platform for OpenSSL build")
+endif()
+
+# Get compiler flags from our project - convert list to space-separated string
+string(REPLACE ";" " " OPENSSL_CFLAGS "${CRYPTO_BENCH_C_FLAGS}")
+string(REPLACE ";" " " OPENSSL_CXXFLAGS "${CRYPTO_BENCH_CXX_FLAGS}")
+
+# Find Perl (required for OpenSSL's build system)
+find_package(Perl REQUIRED)
+
+# Configure OpenSSL build options
+# We want static libraries only, minimal configuration for crypto benchmarks
+set(OPENSSL_CONFIG_OPTIONS
+    --prefix=${OPENSSL_INSTALL_DIR}
+    --openssldir=${OPENSSL_INSTALL_DIR}/ssl
+    no-shared                    # Static libraries only
+    no-apps                      # Don't build openssl command line tool
+    no-docs                      # Don't build documentation
+    no-tests                     # Don't build tests
+    no-fuzz-libfuzzer           # Don't build fuzzing tests
+    no-fuzz-afl                 # Don't build AFL fuzzing
+    enable-static-engine        # Enable static engines
+    no-ssl3                     # Disable SSL 3.0
+    no-ssl3-method             # Disable SSL 3.0 methods
+    no-weak-ssl-ciphers        # Disable weak ciphers
+    no-zlib                    # Don't use zlib compression
+    no-zlib-dynamic            # Don't use dynamic zlib
+    no-comp                    # Disable compression
+    no-deprecated              # Don't include deprecated APIs
+    no-legacy                  # Don't build legacy provider
+    no-module                  # Don't build loadable modules
+    no-dynamic-engine          # Don't build dynamic engines
+    no-err                     # Don't include error strings (saves space)
+    no-ts                      # Don't build timestamping
+    no-cms                     # Don't build CMS
+    no-ct                      # Don't build certificate transparency
+    no-dgram                   # Don't build datagram support
+    no-dtls                    # Don't build DTLS
+    no-dtls1                   # Don't build DTLSv1
+    no-dtls1_2                 # Don't build DTLSv1.2
+    no-tls1                    # Don't build TLSv1
+    no-tls1_1                  # Don't build TLSv1.1
+    no-tls1_2                  # Don't build TLSv1.2
+    no-tls1_3                  # Don't build TLSv1.3
+    no-ssl                     # Don't build SSL/TLS (we only want crypto)
+    no-srp                     # Don't build SRP
+    no-psk                     # Don't build PSK
+    no-idea                    # Don't build IDEA cipher
+    no-mdc2                    # Don't build MDC2
+    no-rc5                     # Don't build RC5
+    no-rc2                     # Don't build RC2
+    no-bf                      # Don't build Blowfish
+    no-cast                    # Don't build CAST
+    no-des                     # Don't build DES (deprecated)
+    no-dh                      # Don't build Diffie-Hellman
+    no-dsa                     # Don't build DSA
+    no-engine                  # Don't build engines
+    no-async                   # Don't build async support
+    no-autoalginit            # Don't auto-initialize algorithms
+    no-autoerrinit            # Don't auto-initialize error strings
+)
+
+# Use ExternalProject_Add to build OpenSSL
+ExternalProject_Add(
+    openssl_external
+    SOURCE_DIR ${OPENSSL_SOURCE_DIR}
+    BINARY_DIR ${OPENSSL_BUILD_DIR}
+    CONFIGURE_COMMAND
+        ${CMAKE_COMMAND} -E env
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
+        CFLAGS=${OPENSSL_CFLAGS}
+        CXXFLAGS=${OPENSSL_CXXFLAGS}
+        ${PERL_EXECUTABLE} ${OPENSSL_SOURCE_DIR}/Configure
+        ${OPENSSL_TARGET}
+        ${OPENSSL_CONFIG_OPTIONS}
+    BUILD_COMMAND
+        ${CMAKE_COMMAND} -E echo "Building OpenSSL 3.6.0..." &&
+        make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+    INSTALL_COMMAND
+        make install_sw  # install_sw = install software only (no docs)
+    BUILD_IN_SOURCE 0
+    BUILD_ALWAYS 0
+    STEP_TARGETS configure build install
+)
+
+# Create imported targets for OpenSSL libraries
+# OpenSSL 3.x creates libssl.a and libcrypto.a
+add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
+add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
+
+# Set library locations
+set(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libcrypto.a)
+set(OPENSSL_SSL_LIBRARY ${OPENSSL_INSTALL_DIR}/lib/libssl.a)
+
+set_target_properties(OpenSSL::Crypto PROPERTIES
+    IMPORTED_LOCATION ${OPENSSL_CRYPTO_LIBRARY}
+    INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+)
+
+set_target_properties(OpenSSL::SSL PROPERTIES
+    IMPORTED_LOCATION ${OPENSSL_SSL_LIBRARY}
+    INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INSTALL_DIR}/include"
+    INTERFACE_LINK_LIBRARIES OpenSSL::Crypto
+)
+
+# Make sure the libraries are built before they're used
+add_dependencies(OpenSSL::Crypto openssl_external)
+add_dependencies(OpenSSL::SSL openssl_external)
+
+# On some platforms, OpenSSL may need additional system libraries
+if(UNIX AND NOT APPLE)
+    # Linux may need libdl and libpthread
+    find_library(DL_LIBRARY dl)
+    if(DL_LIBRARY)
+        set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${DL_LIBRARY})
+    endif()
+    
+    find_library(PTHREAD_LIBRARY pthread)
+    if(PTHREAD_LIBRARY)
+        set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${PTHREAD_LIBRARY})
+    endif()
+elseif(APPLE)
+    # macOS may need CoreFoundation and Security frameworks
+    find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+    find_library(SECURITY_LIBRARY Security)
+    if(COREFOUNDATION_LIBRARY)
+        set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${COREFOUNDATION_LIBRARY})
+    endif()
+    if(SECURITY_LIBRARY)
+        set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES ${SECURITY_LIBRARY})
+    endif()
+endif()
+
+message(STATUS "OpenSSL 3.6.0 configured successfully")
