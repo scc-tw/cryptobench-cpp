@@ -54,7 +54,7 @@ list(APPEND CRYPTO_BENCH_SOURCES
 add_executable(crypto-bench ${CRYPTO_BENCH_SOURCES} ${CRYPTO_BENCH_HEADERS})
 
 # Set C++ standard
-# Botan 3.6.1 requires C++20 for concepts
+# Botan 3.9.0 requires C++20 for concepts
 if(BUILD_BOTAN)
     target_compile_features(crypto-bench PRIVATE cxx_std_20)
 else()

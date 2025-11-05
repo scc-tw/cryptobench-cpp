@@ -1,18 +1,17 @@
-# FetchBotan.cmake - Fetch and configure Botan 3.6.1
+# FetchBotan.cmake - Fetch and configure Botan 3.9.0
 #
 # Botan is a modern C++ cryptographic library with comprehensive algorithm support
-# Note: Using 3.6.1 as 3.9.0 doesn't exist yet - latest stable version
 
 include(FetchContent)
 include(ExternalProject)
 
-message(STATUS "Fetching Botan 3.6.1...")
+message(STATUS "Fetching Botan 3.9.0...")
 
 # Fetch Botan source
 FetchContent_Declare(
     botan_src
     GIT_REPOSITORY https://github.com/randombit/botan.git
-    GIT_TAG        3.9.0  # Latest stable version
+    GIT_TAG        3.9.0  # Version 3.9.0
     GIT_SHALLOW    TRUE
     GIT_PROGRESS   TRUE
 )
@@ -89,4 +88,4 @@ set_target_properties(botan::botan PROPERTIES
 # Make sure the library is built before it's used
 add_dependencies(botan::botan botan_external)
 
-message(STATUS "Botan 3.6.1 configured successfully")
+message(STATUS "Botan 3.9.0 configured successfully")
