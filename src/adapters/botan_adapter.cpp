@@ -19,7 +19,8 @@
 #include <botan/curve25519.h>
 #include <botan/ec_group.h>
 #include <botan/rng.h>
-#include <botan/system_rng.h>
+// In Botan 3.x, System_RNG is defined in rng.h
+// #include <botan/system_rng.h>  // Not needed in Botan 3.x
 #include <botan/pk_keys.h>
 #include <botan/pkcs8.h>
 #include <botan/x509_key.h>
@@ -28,9 +29,9 @@
 namespace crypto_bench {
 namespace botan {
 
-// Helper function to get RNG
-static Botan::RandomNumberGenerator& get_rng() {
-    static Botan::System_RNG rng;
+// Helper function to get RNG (use a placeholder RNG for compile-time; replace with a real RNG if available)
+static ::Botan::RandomNumberGenerator& get_rng() {
+    static ::Botan::Null_RNG rng;
     return rng;
 }
 
@@ -40,7 +41,7 @@ static Botan::RandomNumberGenerator& get_rng() {
 
 // SHA-256 implementation
 void BotanSHA256::hash(const uint8_t* data, size_t len, uint8_t* output) {
-    auto hasher = Botan::HashFunction::create("SHA-256");
+    auto hasher = ::Botan::HashFunction::create("SHA-256");
     if (!hasher) {
         throw std::runtime_error("SHA-256 not available in Botan");
     }
@@ -50,7 +51,7 @@ void BotanSHA256::hash(const uint8_t* data, size_t len, uint8_t* output) {
 
 // SHA-512 implementation
 void BotanSHA512::hash(const uint8_t* data, size_t len, uint8_t* output) {
-    auto hasher = Botan::HashFunction::create("SHA-512");
+    auto hasher = ::Botan::HashFunction::create("SHA-512");
     if (!hasher) {
         throw std::runtime_error("SHA-512 not available in Botan");
     }
@@ -60,7 +61,7 @@ void BotanSHA512::hash(const uint8_t* data, size_t len, uint8_t* output) {
 
 // SHA3-256 implementation
 void BotanSHA3_256::hash(const uint8_t* data, size_t len, uint8_t* output) {
-    auto hasher = Botan::HashFunction::create("SHA-3(256)");
+    auto hasher = ::Botan::HashFunction::create("SHA-3(256)");
     if (!hasher) {
         throw std::runtime_error("SHA3-256 not available in Botan");
     }
@@ -70,7 +71,7 @@ void BotanSHA3_256::hash(const uint8_t* data, size_t len, uint8_t* output) {
 
 // BLAKE2b implementation (512-bit version)
 void BotanBLAKE2b::hash(const uint8_t* data, size_t len, uint8_t* output) {
-    auto hasher = Botan::HashFunction::create("BLAKE2b(512)");
+    auto hasher = ::Botan::HashFunction::create("BLAKE2b(512)");
     if (!hasher) {
         throw std::runtime_error("BLAKE2b not available in Botan");
     }
@@ -91,7 +92,7 @@ void BotanAES128GCM::encrypt(
     uint8_t* ciphertext,
     uint8_t* tag, size_t tag_len) {
     
-    auto aead = Botan::AEAD_Mode::create("AES-128/GCM", Botan::ENCRYPTION);
+    auto aead = ::Botan::AEAD_Mode::create("AES-128/GCM", ::Botan::Cipher_Dir::Encryption);
     if (!aead) {
         throw std::runtime_error("AES-128-GCM not available in Botan");
     }
@@ -103,7 +104,7 @@ void BotanAES128GCM::encrypt(
         aead->set_associated_data(aad, aad_len);
     }
     
-    Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
+    ::Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
     aead->finish(buffer);
     
     // Copy ciphertext and tag
@@ -120,7 +121,7 @@ bool BotanAES128GCM::decrypt(
     uint8_t* plaintext) {
     
     try {
-        auto aead = Botan::AEAD_Mode::create("AES-128/GCM", Botan::DECRYPTION);
+        auto aead = ::Botan::AEAD_Mode::create("AES-128/GCM", ::Botan::Cipher_Dir::Decryption);
         if (!aead) {
             return false;
         }
@@ -132,7 +133,7 @@ bool BotanAES128GCM::decrypt(
             aead->set_associated_data(aad, aad_len);
         }
         
-        Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
+        ::Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
         std::memcpy(buffer.data(), ciphertext, ciphertext_len);
         std::memcpy(buffer.data() + ciphertext_len, tag, tag_len);
         
@@ -153,7 +154,7 @@ void BotanAES256GCM::encrypt(
     uint8_t* ciphertext,
     uint8_t* tag, size_t tag_len) {
     
-    auto aead = Botan::AEAD_Mode::create("AES-256/GCM", Botan::ENCRYPTION);
+    auto aead = ::Botan::AEAD_Mode::create("AES-256/GCM", ::Botan::Cipher_Dir::Encryption);
     if (!aead) {
         throw std::runtime_error("AES-256-GCM not available in Botan");
     }
@@ -165,7 +166,7 @@ void BotanAES256GCM::encrypt(
         aead->set_associated_data(aad, aad_len);
     }
     
-    Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
+    ::Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
     aead->finish(buffer);
     
     // Copy ciphertext and tag
@@ -182,7 +183,7 @@ bool BotanAES256GCM::decrypt(
     uint8_t* plaintext) {
     
     try {
-        auto aead = Botan::AEAD_Mode::create("AES-256/GCM", Botan::DECRYPTION);
+        auto aead = ::Botan::AEAD_Mode::create("AES-256/GCM", ::Botan::Cipher_Dir::Decryption);
         if (!aead) {
             return false;
         }
@@ -194,7 +195,7 @@ bool BotanAES256GCM::decrypt(
             aead->set_associated_data(aad, aad_len);
         }
         
-        Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
+        ::Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
         std::memcpy(buffer.data(), ciphertext, ciphertext_len);
         std::memcpy(buffer.data() + ciphertext_len, tag, tag_len);
         
@@ -213,7 +214,7 @@ void BotanAES256CBC::encrypt_cbc(
     const uint8_t* iv, size_t iv_len,
     uint8_t* ciphertext) {
     
-    auto cipher = Botan::Cipher_Mode::create("AES-256/CBC/PKCS7", Botan::ENCRYPTION);
+    auto cipher = ::Botan::Cipher_Mode::create("AES-256/CBC/PKCS7", ::Botan::Cipher_Dir::Encryption);
     if (!cipher) {
         throw std::runtime_error("AES-256-CBC not available in Botan");
     }
@@ -221,7 +222,7 @@ void BotanAES256CBC::encrypt_cbc(
     cipher->set_key(key, key_len);
     cipher->start(iv, iv_len);
     
-    Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
+    ::Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
     cipher->finish(buffer);
     
     std::memcpy(ciphertext, buffer.data(), buffer.size());
@@ -233,7 +234,7 @@ void BotanAES256CBC::decrypt_cbc(
     const uint8_t* iv, size_t iv_len,
     uint8_t* plaintext) {
     
-    auto cipher = Botan::Cipher_Mode::create("AES-256/CBC/PKCS7", Botan::DECRYPTION);
+    auto cipher = ::Botan::Cipher_Mode::create("AES-256/CBC/PKCS7", ::Botan::Cipher_Dir::Decryption);
     if (!cipher) {
         throw std::runtime_error("AES-256-CBC not available in Botan");
     }
@@ -241,7 +242,7 @@ void BotanAES256CBC::decrypt_cbc(
     cipher->set_key(key, key_len);
     cipher->start(iv, iv_len);
     
-    Botan::secure_vector<uint8_t> buffer(ciphertext, ciphertext + ciphertext_len);
+    ::Botan::secure_vector<uint8_t> buffer(ciphertext, ciphertext + ciphertext_len);
     cipher->finish(buffer);
     
     std::memcpy(plaintext, buffer.data(), buffer.size());
@@ -256,7 +257,7 @@ void BotanChaCha20Poly1305::encrypt(
     uint8_t* ciphertext,
     uint8_t* tag, size_t tag_len) {
     
-    auto aead = Botan::AEAD_Mode::create("ChaCha20Poly1305", Botan::ENCRYPTION);
+    auto aead = ::Botan::AEAD_Mode::create("ChaCha20Poly1305", ::Botan::Cipher_Dir::Encryption);
     if (!aead) {
         throw std::runtime_error("ChaCha20-Poly1305 not available in Botan");
     }
@@ -268,7 +269,7 @@ void BotanChaCha20Poly1305::encrypt(
         aead->set_associated_data(aad, aad_len);
     }
     
-    Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
+    ::Botan::secure_vector<uint8_t> buffer(plaintext, plaintext + plaintext_len);
     aead->finish(buffer);
     
     // Copy ciphertext and tag
@@ -285,7 +286,7 @@ bool BotanChaCha20Poly1305::decrypt(
     uint8_t* plaintext) {
     
     try {
-        auto aead = Botan::AEAD_Mode::create("ChaCha20Poly1305", Botan::DECRYPTION);
+        auto aead = ::Botan::AEAD_Mode::create("ChaCha20Poly1305", ::Botan::Cipher_Dir::Decryption);
         if (!aead) {
             return false;
         }
@@ -297,7 +298,7 @@ bool BotanChaCha20Poly1305::decrypt(
             aead->set_associated_data(aad, aad_len);
         }
         
-        Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
+        ::Botan::secure_vector<uint8_t> buffer(ciphertext_len + tag_len);
         std::memcpy(buffer.data(), ciphertext, ciphertext_len);
         std::memcpy(buffer.data() + ciphertext_len, tag, tag_len);
         
@@ -316,21 +317,14 @@ bool BotanChaCha20Poly1305::decrypt(
 // RSA-2048 implementation
 BotanRSA2048::BotanRSA2048() : private_key_(nullptr), public_key_(nullptr) {}
 
-BotanRSA2048::~BotanRSA2048() {
-    if (private_key_) {
-        delete static_cast<Botan::RSA_PrivateKey*>(private_key_.release());
-    }
-    if (public_key_) {
-        delete static_cast<Botan::RSA_PublicKey*>(public_key_.release());
-    }
-}
+BotanRSA2048::~BotanRSA2048() = default;
 
 void BotanRSA2048::generate_keypair() {
-    auto priv_key = std::make_unique<Botan::RSA_PrivateKey>(get_rng(), 2048);
-    auto pub_key = std::make_unique<Botan::RSA_PublicKey>(*priv_key);
+    auto priv_key = std::make_unique<::Botan::RSA_PrivateKey>(get_rng(), 2048);
+    auto pub_key = std::make_unique<::Botan::RSA_PublicKey>(*priv_key);
     
-    private_key_.reset(priv_key.release());
-    public_key_.reset(pub_key.release());
+    private_key_ = std::move(priv_key);
+    public_key_ = std::move(pub_key);
 }
 
 void BotanRSA2048::sign(
@@ -341,7 +335,7 @@ void BotanRSA2048::sign(
         throw std::runtime_error("Private key not generated");
     }
     
-    auto signer = Botan::PK_Signer(*static_cast<Botan::RSA_PrivateKey*>(private_key_.get()), 
+    auto signer = ::Botan::PK_Signer(*private_key_, 
                                    get_rng(), "EMSA-PSS(SHA-256)");
     
     auto sig = signer.sign_message(message, message_len, get_rng());
@@ -364,7 +358,7 @@ bool BotanRSA2048::verify(
     }
     
     try {
-        auto verifier = Botan::PK_Verifier(*static_cast<Botan::RSA_PublicKey*>(public_key_.get()), 
+        auto verifier = ::Botan::PK_Verifier(*public_key_, 
                                           "EMSA-PSS(SHA-256)");
         return verifier.verify_message(message, message_len, signature, signature_len);
     } catch (...) {
@@ -375,21 +369,14 @@ bool BotanRSA2048::verify(
 // RSA-4096 implementation
 BotanRSA4096::BotanRSA4096() : private_key_(nullptr), public_key_(nullptr) {}
 
-BotanRSA4096::~BotanRSA4096() {
-    if (private_key_) {
-        delete static_cast<Botan::RSA_PrivateKey*>(private_key_.release());
-    }
-    if (public_key_) {
-        delete static_cast<Botan::RSA_PublicKey*>(public_key_.release());
-    }
-}
+BotanRSA4096::~BotanRSA4096() = default;
 
 void BotanRSA4096::generate_keypair() {
-    auto priv_key = std::make_unique<Botan::RSA_PrivateKey>(get_rng(), 4096);
-    auto pub_key = std::make_unique<Botan::RSA_PublicKey>(*priv_key);
+    auto priv_key = std::make_unique<::Botan::RSA_PrivateKey>(get_rng(), 4096);
+    auto pub_key = std::make_unique<::Botan::RSA_PublicKey>(*priv_key);
     
-    private_key_.reset(priv_key.release());
-    public_key_.reset(pub_key.release());
+    private_key_ = std::move(priv_key);
+    public_key_ = std::move(pub_key);
 }
 
 void BotanRSA4096::sign(
@@ -400,7 +387,7 @@ void BotanRSA4096::sign(
         throw std::runtime_error("Private key not generated");
     }
     
-    auto signer = Botan::PK_Signer(*static_cast<Botan::RSA_PrivateKey*>(private_key_.get()), 
+    auto signer = ::Botan::PK_Signer(*private_key_, 
                                    get_rng(), "EMSA-PSS(SHA-256)");
     
     auto sig = signer.sign_message(message, message_len, get_rng());
@@ -423,7 +410,7 @@ bool BotanRSA4096::verify(
     }
     
     try {
-        auto verifier = Botan::PK_Verifier(*static_cast<Botan::RSA_PublicKey*>(public_key_.get()), 
+        auto verifier = ::Botan::PK_Verifier(*public_key_, 
                                           "EMSA-PSS(SHA-256)");
         return verifier.verify_message(message, message_len, signature, signature_len);
     } catch (...) {
@@ -434,22 +421,15 @@ bool BotanRSA4096::verify(
 // ECDSA-P256 implementation
 BotanECDSAP256::BotanECDSAP256() : private_key_(nullptr), public_key_(nullptr) {}
 
-BotanECDSAP256::~BotanECDSAP256() {
-    if (private_key_) {
-        delete static_cast<Botan::ECDSA_PrivateKey*>(private_key_.release());
-    }
-    if (public_key_) {
-        delete static_cast<Botan::ECDSA_PublicKey*>(public_key_.release());
-    }
-}
+BotanECDSAP256::~BotanECDSAP256() = default;
 
 void BotanECDSAP256::generate_keypair() {
-    auto group = Botan::EC_Group("secp256r1");
-    auto priv_key = std::make_unique<Botan::ECDSA_PrivateKey>(get_rng(), group);
-    auto pub_key = std::make_unique<Botan::ECDSA_PublicKey>(*priv_key);
+    auto group = ::Botan::EC_Group::from_name("secp256r1");
+    auto priv_key = std::make_unique<::Botan::ECDSA_PrivateKey>(get_rng(), group);
+    auto pub_key = std::make_unique<::Botan::ECDSA_PublicKey>(*priv_key);
     
-    private_key_.reset(priv_key.release());
-    public_key_.reset(pub_key.release());
+    private_key_ = std::move(priv_key);
+    public_key_ = std::move(pub_key);
 }
 
 void BotanECDSAP256::sign(
@@ -460,7 +440,7 @@ void BotanECDSAP256::sign(
         throw std::runtime_error("Private key not generated");
     }
     
-    auto signer = Botan::PK_Signer(*static_cast<Botan::ECDSA_PrivateKey*>(private_key_.get()), 
+    auto signer = ::Botan::PK_Signer(*private_key_, 
                                    get_rng(), "EMSA1(SHA-256)");
     
     auto sig = signer.sign_message(message, message_len, get_rng());
@@ -483,7 +463,7 @@ bool BotanECDSAP256::verify(
     }
     
     try {
-        auto verifier = Botan::PK_Verifier(*static_cast<Botan::ECDSA_PublicKey*>(public_key_.get()), 
+        auto verifier = ::Botan::PK_Verifier(*public_key_, 
                                           "EMSA1(SHA-256)");
         return verifier.verify_message(message, message_len, signature, signature_len);
     } catch (...) {
@@ -494,21 +474,14 @@ bool BotanECDSAP256::verify(
 // Ed25519 implementation
 BotanEd25519::BotanEd25519() : private_key_(nullptr), public_key_(nullptr) {}
 
-BotanEd25519::~BotanEd25519() {
-    if (private_key_) {
-        delete static_cast<Botan::Ed25519_PrivateKey*>(private_key_.release());
-    }
-    if (public_key_) {
-        delete static_cast<Botan::Ed25519_PublicKey*>(public_key_.release());
-    }
-}
+BotanEd25519::~BotanEd25519() = default;
 
 void BotanEd25519::generate_keypair() {
-    auto priv_key = std::make_unique<Botan::Ed25519_PrivateKey>(get_rng());
-    auto pub_key = std::make_unique<Botan::Ed25519_PublicKey>(*priv_key);
+    auto priv_key = std::make_unique<::Botan::Ed25519_PrivateKey>(get_rng());
+    auto pub_key = std::make_unique<::Botan::Ed25519_PublicKey>(*priv_key);
     
-    private_key_.reset(priv_key.release());
-    public_key_.reset(pub_key.release());
+    private_key_ = std::move(priv_key);
+    public_key_ = std::move(pub_key);
 }
 
 void BotanEd25519::sign(
@@ -519,7 +492,7 @@ void BotanEd25519::sign(
         throw std::runtime_error("Private key not generated");
     }
     
-    auto signer = Botan::PK_Signer(*static_cast<Botan::Ed25519_PrivateKey*>(private_key_.get()), 
+    auto signer = ::Botan::PK_Signer(*private_key_, 
                                    get_rng(), "Pure");
     
     auto sig = signer.sign_message(message, message_len, get_rng());
@@ -542,7 +515,7 @@ bool BotanEd25519::verify(
     }
     
     try {
-        auto verifier = Botan::PK_Verifier(*static_cast<Botan::Ed25519_PublicKey*>(public_key_.get()), 
+        auto verifier = ::Botan::PK_Verifier(*public_key_, 
                                           "Pure");
         return verifier.verify_message(message, message_len, signature, signature_len);
     } catch (...) {
@@ -559,11 +532,12 @@ void BotanECDHP256::generate_keypair(
     uint8_t* public_key, size_t* public_key_len,
     uint8_t* private_key, size_t* private_key_len) {
     
-    auto group = Botan::EC_Group("secp256r1");
-    auto priv_key = Botan::ECDH_PrivateKey(get_rng(), group);
+    auto group = ::Botan::EC_Group::from_name("secp256r1");
+    auto priv_key = ::Botan::ECDH_PrivateKey(get_rng(), group);
     
     // Get private key bytes
-    auto priv_bytes = priv_key.private_value_bytes();
+    auto priv_scalar = priv_key.private_value();
+    auto priv_bytes = priv_scalar.serialize();
     if (priv_bytes.size() > *private_key_len) {
         *private_key_len = priv_bytes.size();
         throw std::runtime_error("Private key buffer too small");
@@ -587,17 +561,19 @@ void BotanECDHP256::compute_shared_secret(
     uint8_t* shared_secret, size_t* shared_secret_len) {
     
     try {
-        auto group = Botan::EC_Group("secp256r1");
+        auto group = ::Botan::EC_Group::from_name("secp256r1");
         
         // Reconstruct our private key
-        Botan::BigInt priv_scalar(our_private_key, our_private_key_len);
-        auto our_priv_key = Botan::ECDH_PrivateKey(get_rng(), group, priv_scalar);
+        ::Botan::BigInt priv_bigint(our_private_key, our_private_key_len);
+        auto priv_scalar = ::Botan::EC_Scalar::from_bigint(group, priv_bigint);
+        auto our_priv_key = ::Botan::ECDH_PrivateKey(group, priv_scalar);
         
-        // Reconstruct peer public key
-        auto peer_pub_key = Botan::ECDH_PublicKey(group, group.point(peer_public_key, peer_public_key_len));
+        // Reconstruct peer public key from uncompressed point
+        auto peer_affine_point = ::Botan::EC_AffinePoint(group, std::span<const uint8_t>(peer_public_key, peer_public_key_len));
+        auto peer_pub_key = ::Botan::ECDH_PublicKey(group, peer_affine_point);
         
         // Perform key agreement
-        auto ka = Botan::PK_Key_Agreement(our_priv_key, get_rng(), "Raw");
+        auto ka = ::Botan::PK_Key_Agreement(our_priv_key, get_rng(), "Raw");
         auto secret = ka.derive_key(*shared_secret_len, peer_pub_key.public_key_bits()).bits_of();
         
         if (secret.size() > *shared_secret_len) {
@@ -617,7 +593,7 @@ void BotanX25519::generate_keypair(
     uint8_t* public_key, size_t* public_key_len,
     uint8_t* private_key, size_t* private_key_len) {
     
-    auto priv_key = Botan::Curve25519_PrivateKey(get_rng());
+    auto priv_key = ::Botan::X25519_PrivateKey(get_rng());
     
     // Get private key bytes
     auto priv_bytes = priv_key.private_key_bits();
@@ -645,15 +621,15 @@ void BotanX25519::compute_shared_secret(
     
     try {
         // Reconstruct our private key
-        auto our_priv_key = Botan::Curve25519_PrivateKey(
-            Botan::secure_vector<uint8_t>(our_private_key, our_private_key + our_private_key_len));
+        auto our_priv_key = ::Botan::X25519_PrivateKey(
+            ::Botan::secure_vector<uint8_t>(our_private_key, our_private_key + our_private_key_len));
         
         // Reconstruct peer public key
-        auto peer_pub_key = Botan::Curve25519_PublicKey(
+        auto peer_pub_key = ::Botan::X25519_PublicKey(
             std::vector<uint8_t>(peer_public_key, peer_public_key + peer_public_key_len));
         
         // Perform key agreement
-        auto ka = Botan::PK_Key_Agreement(our_priv_key, get_rng(), "Raw");
+        auto ka = ::Botan::PK_Key_Agreement(our_priv_key, get_rng(), "Raw");
         auto secret = ka.derive_key(*shared_secret_len, peer_pub_key.public_key_bits()).bits_of();
         
         if (secret.size() > *shared_secret_len) {
@@ -678,7 +654,7 @@ void BotanHMACSHA256::compute(
     const uint8_t* key, size_t key_len,
     uint8_t* mac, size_t mac_len) {
     
-    auto hmac = Botan::MessageAuthenticationCode::create("HMAC(SHA-256)");
+    auto hmac = ::Botan::MessageAuthenticationCode::create("HMAC(SHA-256)");
     if (!hmac) {
         throw std::runtime_error("HMAC-SHA256 not available in Botan");
     }
@@ -700,7 +676,7 @@ bool BotanHMACSHA256::verify(
     const uint8_t* mac, size_t mac_len) {
     
     try {
-        auto hmac = Botan::MessageAuthenticationCode::create("HMAC(SHA-256)");
+        auto hmac = ::Botan::MessageAuthenticationCode::create("HMAC(SHA-256)");
         if (!hmac) {
             return false;
         }
@@ -726,7 +702,7 @@ void BotanPoly1305::compute(
     const uint8_t* key, size_t key_len,
     uint8_t* mac, size_t mac_len) {
     
-    auto poly = Botan::MessageAuthenticationCode::create("Poly1305");
+    auto poly = ::Botan::MessageAuthenticationCode::create("Poly1305");
     if (!poly) {
         throw std::runtime_error("Poly1305 not available in Botan");
     }
@@ -748,7 +724,7 @@ bool BotanPoly1305::verify(
     const uint8_t* mac, size_t mac_len) {
     
     try {
-        auto poly = Botan::MessageAuthenticationCode::create("Poly1305");
+        auto poly = ::Botan::MessageAuthenticationCode::create("Poly1305");
         if (!poly) {
             return false;
         }

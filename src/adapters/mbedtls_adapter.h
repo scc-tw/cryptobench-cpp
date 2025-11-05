@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <cstdint>
+#include <psa/crypto.h>
 #include "common/crypto_adapter.h"
 
 namespace crypto_bench {
@@ -179,9 +180,7 @@ public:
 // Asymmetric signature adapters
 class MbedTLSRSA2048 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<struct mbedtls_rsa_context> rsa_ctx_;
-    std::unique_ptr<struct mbedtls_ctr_drbg_context> ctr_drbg_;
-    std::unique_ptr<struct mbedtls_entropy_context> entropy_;
+    psa_key_id_t key_id_;
 
 public:
     MbedTLSRSA2048();
@@ -204,9 +203,7 @@ public:
 
 class MbedTLSRSA4096 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<struct mbedtls_rsa_context> rsa_ctx_;
-    std::unique_ptr<struct mbedtls_ctr_drbg_context> ctr_drbg_;
-    std::unique_ptr<struct mbedtls_entropy_context> entropy_;
+    psa_key_id_t key_id_;
 
 public:
     MbedTLSRSA4096();
@@ -229,9 +226,7 @@ public:
 
 class MbedTLSECDSAP256 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<struct mbedtls_ecdsa_context> ecdsa_ctx_;
-    std::unique_ptr<struct mbedtls_ctr_drbg_context> ctr_drbg_;
-    std::unique_ptr<struct mbedtls_entropy_context> entropy_;
+    psa_key_id_t key_id_;
 
 public:
     MbedTLSECDSAP256();
@@ -258,9 +253,7 @@ public:
 // Key exchange adapters
 class MbedTLSECDHP256 : public KeyExchangeAdapter {
 private:
-    std::unique_ptr<struct mbedtls_ecdh_context> ecdh_ctx_;
-    std::unique_ptr<struct mbedtls_ctr_drbg_context> ctr_drbg_;
-    std::unique_ptr<struct mbedtls_entropy_context> entropy_;
+    psa_key_id_t key_id_;
 
 public:
     MbedTLSECDHP256();

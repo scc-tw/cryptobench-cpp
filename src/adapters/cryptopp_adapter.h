@@ -7,6 +7,8 @@
 
 #include "common/crypto_adapter.h"
 #include <xed25519.h>
+#include <rsa.h>
+#include <eccrypto.h>
 
 #ifdef ENABLE_CRYPTOPP
 
@@ -242,8 +244,8 @@ public:
 
 class CryptoppEd25519 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<CryptoPP::ed25519::PrivateKey> private_key_;
-    std::unique_ptr<CryptoPP::ed25519::PublicKey> public_key_;
+    std::unique_ptr<CryptoPP::ed25519PrivateKey> private_key_;
+    std::unique_ptr<CryptoPP::ed25519PublicKey> public_key_;
 
 public:
     CryptoppEd25519();

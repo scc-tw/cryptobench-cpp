@@ -88,18 +88,21 @@ void CryptoppAES128GCM::encrypt(
         CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
         enc.SetKeyWithIV(key, key_len, iv, iv_len);
         
+        // Use a string to collect both ciphertext and tag
+        std::string output;
         CryptoPP::AuthenticatedEncryptionFilter aef(enc,
-            new CryptoPP::ArraySink(ciphertext, plaintext_len),
+            new CryptoPP::StringSink(output),
             false, tag_len
         );
-        
+
         aef.ChannelPut("AAD", aad, aad_len);
         aef.ChannelMessageEnd("AAD");
         aef.ChannelPut("", plaintext, plaintext_len);
         aef.ChannelMessageEnd("");
-        
-        // Get the tag
-        aef.GetTag(tag, tag_len);
+
+        // Copy ciphertext and tag from output
+        std::memcpy(ciphertext, output.data(), plaintext_len);
+        std::memcpy(tag, output.data() + plaintext_len, tag_len);
     } catch (const CryptoPP::Exception& e) {
         throw std::runtime_error("AES-128-GCM encryption failed: " + std::string(e.what()));
     }
@@ -148,18 +151,22 @@ void CryptoppAES256GCM::encrypt(
     try {
         CryptoPP::GCM<CryptoPP::AES>::Encryption enc;
         enc.SetKeyWithIV(key, key_len, iv, iv_len);
-        
+
+        // Use a string to collect both ciphertext and tag
+        std::string output;
         CryptoPP::AuthenticatedEncryptionFilter aef(enc,
-            new CryptoPP::ArraySink(ciphertext, plaintext_len),
+            new CryptoPP::StringSink(output),
             false, tag_len
         );
-        
+
         aef.ChannelPut("AAD", aad, aad_len);
         aef.ChannelMessageEnd("AAD");
         aef.ChannelPut("", plaintext, plaintext_len);
         aef.ChannelMessageEnd("");
-        
-        aef.GetTag(tag, tag_len);
+
+        // Copy ciphertext and tag from output
+        std::memcpy(ciphertext, output.data(), plaintext_len);
+        std::memcpy(tag, output.data() + plaintext_len, tag_len);
     } catch (const CryptoPP::Exception& e) {
         throw std::runtime_error("AES-256-GCM encryption failed: " + std::string(e.what()));
     }
@@ -251,18 +258,22 @@ void CryptoppChaCha20Poly1305::encrypt(
     try {
         CryptoPP::ChaCha20Poly1305::Encryption enc;
         enc.SetKeyWithIV(key, key_len, iv, iv_len);
-        
+
+        // Use a string to collect both ciphertext and tag
+        std::string output;
         CryptoPP::AuthenticatedEncryptionFilter aef(enc,
-            new CryptoPP::ArraySink(ciphertext, plaintext_len),
+            new CryptoPP::StringSink(output),
             false, tag_len
         );
-        
+
         aef.ChannelPut("AAD", aad, aad_len);
         aef.ChannelMessageEnd("AAD");
         aef.ChannelPut("", plaintext, plaintext_len);
         aef.ChannelMessageEnd("");
-        
-        aef.GetTag(tag, tag_len);
+
+        // Copy ciphertext and tag from output
+        std::memcpy(ciphertext, output.data(), plaintext_len);
+        std::memcpy(tag, output.data() + plaintext_len, tag_len);
     } catch (const CryptoPP::Exception& e) {
         throw std::runtime_error("ChaCha20-Poly1305 encryption failed: " + std::string(e.what()));
     }
@@ -454,9 +465,9 @@ bool CryptoppECDSAP256::verify(
 }
 
 // Ed25519 implementation
-CryptoppEd25519::CryptoppEd25519() 
-    : private_key_(std::make_unique<CryptoPP::ed25519::PrivateKey>()),
-      public_key_(std::make_unique<CryptoPP::ed25519::PublicKey>()) {
+CryptoppEd25519::CryptoppEd25519()
+    : private_key_(std::make_unique<CryptoPP::ed25519PrivateKey>()),
+      public_key_(std::make_unique<CryptoPP::ed25519PublicKey>()) {
 }
 
 CryptoppEd25519::~CryptoppEd25519() = default;
@@ -464,7 +475,7 @@ CryptoppEd25519::~CryptoppEd25519() = default;
 void CryptoppEd25519::generate_keypair() {
     try {
         CryptoPP::AutoSeededRandomPool rng;
-        private_key_->GenerateRandom(rng);
+        private_key_->GenerateRandom(rng, CryptoPP::g_nullNameValuePairs);
         private_key_->MakePublicKey(*public_key_);
     } catch (const CryptoPP::Exception& e) {
         throw std::runtime_error("Ed25519 key generation failed: " + std::string(e.what()));
@@ -477,7 +488,7 @@ void CryptoppEd25519::sign(
 ) {
     try {
         CryptoPP::AutoSeededRandomPool rng;
-        CryptoPP::ed25519::Signer signer(*private_key_);
+        CryptoPP::ed25519Signer signer(*private_key_);
         
         size_t sig_len = signer.SignatureLength();
         if (*signature_len < sig_len) {
@@ -496,7 +507,7 @@ bool CryptoppEd25519::verify(
     const uint8_t* signature, size_t signature_len
 ) {
     try {
-        CryptoPP::ed25519::Verifier verifier(*public_key_);
+        CryptoPP::ed25519Verifier verifier(*public_key_);
         return verifier.VerifyMessage(message, message_len, signature, signature_len);
     } catch (const CryptoPP::Exception&) {
         return false;

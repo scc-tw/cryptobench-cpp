@@ -14,6 +14,16 @@
 #include <cstdint>
 #include "common/crypto_adapter.h"
 
+// Forward declare Botan types at global scope to allow pointer members without including Botan headers here
+namespace Botan {
+class RSA_PrivateKey;
+class RSA_PublicKey;
+class ECDSA_PrivateKey;
+class ECDSA_PublicKey;
+class Ed25519_PrivateKey;
+class Ed25519_PublicKey;
+}
+
 namespace crypto_bench {
 namespace botan {
 
@@ -202,8 +212,8 @@ public:
 // RSA-2048 signature adapter
 class BotanRSA2048 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<void> private_key_;
-    std::unique_ptr<void> public_key_;
+    std::unique_ptr<::Botan::RSA_PrivateKey> private_key_;
+    std::unique_ptr<::Botan::RSA_PublicKey> public_key_;
 
 public:
     BotanRSA2048();
@@ -227,8 +237,8 @@ public:
 // RSA-4096 signature adapter
 class BotanRSA4096 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<void> private_key_;
-    std::unique_ptr<void> public_key_;
+    std::unique_ptr<::Botan::RSA_PrivateKey> private_key_;
+    std::unique_ptr<::Botan::RSA_PublicKey> public_key_;
 
 public:
     BotanRSA4096();
@@ -252,8 +262,8 @@ public:
 // ECDSA-P256 signature adapter
 class BotanECDSAP256 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<void> private_key_;
-    std::unique_ptr<void> public_key_;
+    std::unique_ptr<::Botan::ECDSA_PrivateKey> private_key_;
+    std::unique_ptr<::Botan::ECDSA_PublicKey> public_key_;
 
 public:
     BotanECDSAP256();
@@ -277,8 +287,8 @@ public:
 // Ed25519 signature adapter
 class BotanEd25519 : public AsymmetricSignAdapter {
 private:
-    std::unique_ptr<void> private_key_;
-    std::unique_ptr<void> public_key_;
+    std::unique_ptr<::Botan::Ed25519_PrivateKey> private_key_;
+    std::unique_ptr<::Botan::Ed25519_PublicKey> public_key_;
 
 public:
     BotanEd25519();

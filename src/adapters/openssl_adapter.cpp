@@ -300,7 +300,6 @@ void OpenSSLAES256CBC::encrypt_cbc(
     }
 
     int len;
-    int ciphertext_len_total = 0;
     
     if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key, iv) != 1) {
         EVP_CIPHER_CTX_free(ctx);
@@ -311,13 +310,11 @@ void OpenSSLAES256CBC::encrypt_cbc(
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC encrypt update failed");
     }
-    ciphertext_len_total = len;
 
     if (EVP_EncryptFinal_ex(ctx, ciphertext + len, &len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC encrypt final failed");
     }
-    ciphertext_len_total += len;
 
     EVP_CIPHER_CTX_free(ctx);
 }
@@ -334,7 +331,6 @@ void OpenSSLAES256CBC::decrypt_cbc(
     }
 
     int len;
-    int plaintext_len_total = 0;
     
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key, iv) != 1) {
         EVP_CIPHER_CTX_free(ctx);
@@ -345,13 +341,11 @@ void OpenSSLAES256CBC::decrypt_cbc(
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC decrypt update failed");
     }
-    plaintext_len_total = len;
 
     if (EVP_DecryptFinal_ex(ctx, plaintext + len, &len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("AES-256-CBC decrypt final failed");
     }
-    plaintext_len_total += len;
 
     EVP_CIPHER_CTX_free(ctx);
 }
