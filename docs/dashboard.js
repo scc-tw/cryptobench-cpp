@@ -251,27 +251,90 @@ class CryptoBenchDashboard {
         return Math.pow(product, 1 / values.length);
     }
 
-    // Calculate composite scores for each library
+    // Calculate composite scores for each library using "Most First Places" method
     calculateCompositeScores(data) {
-        const scores = {};
+        // Count first, second, and third places for each library
+        const medalCounts = {};
+        this.libraries.forEach(lib => {
+            medalCounts[lib] = {
+                gold: 0,    // First places (第一名)
+                silver: 0,  // Second places (第二名)
+                bronze: 0,  // Third places (第三名)
+                total: 0,   // Total benchmarks participated
+                avgPerformance: 0
+            };
+        });
 
-        this.libraries.forEach(library => {
-            const categoryScores = [];
+        // Analyze each algorithm and block size combination
+        const benchmarkResults = [];
 
-            Object.entries(this.categories).forEach(([category, algorithms]) => {
-                const categoryScore = this.calculateCategoryScore(library, category, data);
-                if (categoryScore > 0) {
-                    categoryScores.push(categoryScore);
+        // Go through each category and algorithm
+        Object.entries(data.byCategory).forEach(([category, libraryData]) => {
+            // Get all unique algorithm/blocksize combinations
+            const algorithms = new Set();
+            Object.values(libraryData).forEach(libData => {
+                if (typeof libData === 'object') {
+                    Object.keys(libData).forEach(key => algorithms.add(key));
                 }
             });
 
-            if (categoryScores.length > 0) {
-                // Normalize scores relative to best in each category
-                const normalizedScores = this.normalizeScores(categoryScores, data);
-                scores[library] = this.geometricMean(normalizedScores);
-            } else {
-                scores[library] = 0;
-            }
+            algorithms.forEach(algo => {
+                const results = [];
+
+                // Collect performance for each library
+                Object.entries(libraryData).forEach(([library, perfData]) => {
+                    if (perfData && perfData[algo] && perfData[algo] > 0) {
+                        results.push({
+                            library: library,
+                            performance: perfData[algo]
+                        });
+                    }
+                });
+
+                // Sort by performance (higher is better)
+                results.sort((a, b) => b.performance - a.performance);
+
+                // Award medals
+                if (results.length > 0) {
+                    // Gold medal (第一名)
+                    medalCounts[results[0].library].gold++;
+                    medalCounts[results[0].library].total++;
+
+                    // Silver medal (第二名)
+                    if (results.length > 1) {
+                        medalCounts[results[1].library].silver++;
+                        medalCounts[results[1].library].total++;
+                    }
+
+                    // Bronze medal (第三名)
+                    if (results.length > 2) {
+                        medalCounts[results[2].library].bronze++;
+                        medalCounts[results[2].library].total++;
+                    }
+
+                    // Track for debugging
+                    benchmarkResults.push({
+                        category: category,
+                        algorithm: algo,
+                        winner: results[0].library,
+                        results: results
+                    });
+                }
+            });
+        });
+
+        // Store detailed medal counts for display
+        this.medalCounts = medalCounts;
+        this.benchmarkWinners = benchmarkResults;
+
+        // Calculate final scores based on medals
+        // Scoring: Gold = 3 points, Silver = 2 points, Bronze = 1 point
+        // But primarily sort by number of gold medals
+        const scores = {};
+        Object.entries(medalCounts).forEach(([library, medals]) => {
+            // Primary score is based on gold medals count
+            // Add small fractions for silver and bronze to break ties
+            scores[library] = medals.gold + (medals.silver * 0.01) + (medals.bronze * 0.0001);
         });
 
         return scores;
@@ -342,7 +405,7 @@ class CryptoBenchDashboard {
         // Render initial charts
         this.renderRadarChart();
         this.renderCategoryChart();
-        this.renderHighlights();
+        this.renderMedalLeaderboard();  // Show medal leaderboard instead of generic highlights
     }
 
     // Update header statistics
@@ -360,13 +423,25 @@ class CryptoBenchDashboard {
 
     // Render overview section
     renderOverview() {
-        // Find top performer
+        // Find top performer (most first places)
         const scores = this.processedData.aggregates;
         const topLibrary = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
 
-        if (topLibrary) {
-            document.getElementById('topLibrary').textContent = topLibrary[0];
-            document.getElementById('topScore').textContent = topLibrary[1].toFixed(1);
+        if (topLibrary && this.medalCounts) {
+            const libraryName = topLibrary[0];
+            const medals = this.medalCounts[libraryName];
+
+            document.getElementById('topLibrary').textContent = libraryName;
+
+            // Show medal counts instead of geometric mean score
+            const medalDisplay = `🥇 ${medals.gold} 🥈 ${medals.silver} 🥉 ${medals.bronze}`;
+            document.getElementById('topScore').textContent = medalDisplay;
+
+            // Update the label to reflect new scoring method
+            const scoreLabel = document.querySelector('.score-label');
+            if (scoreLabel) {
+                scoreLabel.textContent = 'Medal Count (獎牌數)';
+            }
         }
     }
 
@@ -499,6 +574,44 @@ class CryptoBenchDashboard {
                 }
             }
         });
+    }
+
+    // Render medal leaderboard
+    renderMedalLeaderboard() {
+        if (!this.medalCounts) return;
+
+        // Create leaderboard HTML
+        const leaderboard = Object.entries(this.medalCounts)
+            .sort((a, b) => {
+                // Sort by gold, then silver, then bronze
+                if (b[1].gold !== a[1].gold) return b[1].gold - a[1].gold;
+                if (b[1].silver !== a[1].silver) return b[1].silver - a[1].silver;
+                return b[1].bronze - a[1].bronze;
+            })
+            .map(([ library, medals], index) => `
+                <div class="highlight-card">
+                    <div class="highlight-title">${index + 1}. ${library}</div>
+                    <div class="highlight-value">
+                        🥇 ${medals.gold} 🥈 ${medals.silver} 🥉 ${medals.bronze}
+                    </div>
+                    <div class="highlight-detail">
+                        Total wins: ${medals.gold} out of ${this.benchmarkWinners.length} benchmarks
+                        (${(medals.gold * 100 / this.benchmarkWinners.length).toFixed(1)}%)
+                    </div>
+                </div>
+            `).join('');
+
+        // Add leaderboard to highlights section
+        const highlightsGrid = document.getElementById('highlightsGrid');
+        if (highlightsGrid) {
+            highlightsGrid.innerHTML = `
+                <div class="highlight-card" style="grid-column: span 3;">
+                    <div class="highlight-title">🏆 Medal Leaderboard</div>
+                    <div class="highlight-detail">Ranking based on Most First Places</div>
+                </div>
+                ${leaderboard}
+            `;
+        }
     }
 
     // Render performance highlights
